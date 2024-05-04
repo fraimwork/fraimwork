@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from model import translator
+from transformer_model import translator
 
 app = Flask(__name__)
 
