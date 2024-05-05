@@ -1,2 +1,2 @@
-# nomadic
+# sherpa
 Converting framework to framework using the attention mechanism.
