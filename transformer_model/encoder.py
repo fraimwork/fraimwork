@@ -80,13 +80,8 @@ class TransformerEncoderLayer(nn.Module):
         ##### YOUR CODE STARTS HERE #####
 
         x = self.self_attn(x, x, x, key_padding_mask=self_attn_padding_mask)
-
         x = self.dropout(x)
-
         x = self.self_attn_layer_norm(x + residual)
-
-
-
         #### YOUR CODE ENDS HERE #####
 
         ## Implement encoder position-wise feedforward, dropout, and then the Add & Norm opertion
