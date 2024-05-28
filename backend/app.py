@@ -9,18 +9,32 @@ import os
 
 app = Flask(__name__)
 
+# Get local .env file
+from dotenv import load_dotenv
+load_dotenv()
+
+
+
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GITHUB_API_URL = 'https://api.github.com'
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/translate', methods=['POST'])
-def translate_text():
-    text = request.form['text']
-    source = 'flutter'
-    target = 'react'
-    # TODO: Translate Text
-    translated_text = ""
-    return render_template('result.html', translated_text=translated_text)
+@app.route('/translate_and_pr', methods=['POST'])
+def translate_and_pr():
+    repo_link = request.form['repo']
+    # Fetch the repository
+    response = requests.get(repo_link)
+    if response.status_code != 200:
+        return render_template('result.html', result="Failed to fetch repository")
+    # Run the model and save the translated code to some path
+    ...
+    translated_code = "path/to/translated/code"
+    # Create a pull request
+
+    return render_template('result.html', result="Success")
 
 @app.route('/train', methods=['POST'])
 def train_model(source: str, target: str):
@@ -40,8 +54,67 @@ def train_model(source: str, target: str):
     for i in range(10000):
         VARIABLE_TOKENS.append(f'<VAR_{i}>')
 
+import requests
+import os
+import json
+
+def create_pull_request(repo_link, base_branch, new_branch, title, body):
+    # Obtain our GitHub personal access token
+    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+
+    # Construct the PR
+    BASE_BRANCH = base_branch
+    NEW_BRANCH = new_branch
+    PR_TITLE = 'Translation by Fraimwork'
+    PR_BODY = 'This pull request was created by Fraimwork to translate the repository from '
+
+    # Set the headers for authorization
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+    # Step 1: Get the SHA of the base branch (main)
+    response = requests.get(
+        f'https://api.github.com/repos/{GITHUB_USER}/{REPO_NAME}/git/refs/heads/{BASE_BRANCH}',
+        headers=headers
+    )
+    response.raise_for_status()
+    base_sha = response.json()['object']['sha']
+
+    # Step 2: Create a new branch
+    data = {
+        'ref': f'refs/heads/{NEW_BRANCH}',
+        'sha': base_sha
+    }
+    response = requests.post(
+        f'https://api.github.com/repos/{GITHUB_USER}/{REPO_NAME}/git/refs',
+        headers=headers,
+        data=json.dumps(data)
+    )
+    response.raise_for_status()
+
+    # Note: You would typically make some changes to the new branch here before committing and pushing
+
+    # Step 3: Create a pull request
+    data = {
+        'title': PR_TITLE,
+        'body': PR_BODY,
+        'head': NEW_BRANCH,
+        'base': BASE_BRANCH
+    }
+    response = requests.post(
+        f'https://api.github.com/repos/{GITHUB_USER}/{REPO_NAME}/pulls',
+        headers=headers,
+        data=json.dumps(data)
+    )
+    response.raise_for_status()
+    pr_url = response.json()['html_url']
+
+    print(f'Pull request created: {pr_url}')
+
 def get_repos(num_repos=10, idea="whatsapp"):
-    """Fetches 10 Flutter and 10 React Native repos for a given `idea` from GitHub.
+    """Fetches `num_repos` Flutter and React Native repos for a given `idea` from GitHub.
 
     Args:
         num_repos (int, optional): Number of repositories to fetch for each framework. Defaults to 10.
@@ -91,12 +164,14 @@ def get_repos(num_repos=10, idea="whatsapp"):
 
 def download_training_data():
     """Downloads training from GitHub and saves it to a directory."""
-    data = get_repos()
+    with open('data/clones.txt', 'r') as file:
+        clones = file.readlines()
+    data = [repo for repos in [get_repos(idea=clone) for clone in clones] for repo in repos]
     with open("data.json", "w") as file:
         json.dump(data, file)
 
 def search_github_repos(query, framework, language, num_repos=5):
-    url = f"https://api.github.com/search/repositories?q={query}+clone+{framework}+language:{language}&sort=stars&order=desc"
+    url = f"{GITHUB_API_URL}/search/repositories?q={query}+clone+{framework}+language:{language}&sort=stars&order=desc"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json()['items'][:num_repos]
