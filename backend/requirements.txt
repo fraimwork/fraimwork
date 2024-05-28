@@ -1,5 +1,6 @@
 torch
-tensorflow
 numpy
 flask
-keras
+requests
+transformers
+tokenizers
