@@ -74,42 +74,6 @@ function App() {
             </Stepper>
         </Container>
     );
-    
-    const handleSubmit = async () => {
-        // const translateCode = httpsCallable(functions, 'translateCode');
-        // const result = await translateCode({ repoLink, targetFramework });
-        // console.log(result.data.message);
-        console.log('Submitted');
-    };
-
-    return (
-        <Container style={{ justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                <TextField
-                    variant="outlined"
-                    label="GitHub Repo Link"
-                    value={repoLink}
-                    onChange={(e) => setRepoLink(e.target.value)}
-                    style={{ width: '300px', borderRadius: '50px' }}
-                />
-                <Dropdown>
-                    label="Target Framework"
-                    value={targetFramework}
-                    onChange={(e) => setTargetFramework(e.target.value)}
-                    options={frameworks}
-                    style={{ width: '300px', borderRadius: '50px' }}
-                </Dropdown>
-                <Button
-                    variant="contained"
-                    color="secondary"
-                    onClick={handleSubmit}
-                    style={{ borderRadius: '50px' }}
-                >
-                    Submit
-                </Button>
-            </form>
-        </Container>
-    );
 }
 
 export default App;
