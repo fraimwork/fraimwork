@@ -1,0 +1,58 @@
+for i in 1...10: print i
+##
+for i in 1...9: print i
+##
+for i in 1...8: print i
+##
+for i in 1...7: print i
+##
+for i in 1...6: print i
+##
+for i in 1...5: print i
+##
+for i in 1...4: print i
+##
+for i in 1...3: print i
+##
+for i in 1...2: print i
+##
+for i in 1...1: print i
+##
+for i in 3...9: print i
+##
+for i in 3...8: print i
+##
+for i in 3...7: print i
+##
+for i in 3...6: print i
+##
+initialize x = 5
+##
+initialize y = 3
+##
+initialize k = -12
+##
+x++
+##
+Scaffold Example
+##
+Tab Bar Example
+##
+Button Example
+##
+Counter App Example
+##
+if, else if, else Example
+##
+for loop Example
+##
+while loop Example
+##
+list comprehension Example
+##
+map Example
+##
+filter Example
+##
+reduce Example
+##

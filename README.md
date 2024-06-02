@@ -1,3 +1,3 @@
 # Fraimwork
 
-An app that allows users to translate their repositories from framework to framework.
+A web app that allows users to translate their GitHub repositories from one framework to another.
