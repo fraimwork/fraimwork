@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request
-from parsing.parser import dart_tokenizer, javascript_tokenizer
 import requests
-from machine_learning.transformer import Transformer
+from backend.utils.transformer import Transformer
 from utils.returny import create_pull_request
 from utils.training import download_training_data
 import json

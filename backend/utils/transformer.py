@@ -50,19 +50,40 @@ class SnippetEmbedding(nn.Module):
     
     def batch_tokenize(self, batch, start_token, end_token):
         def tokenize(sentence, start_token, end_token):
-            sentence_word_indicies = [self.language_to_index[token] for token in list(sentence)]
+            sentence_word_indices = [self.language_to_index[token] if token in self.language_to_index else 2 for token in list(sentence)]
             if start_token:
-                sentence_word_indicies.insert(0, self.language_to_index[self.START_TOKEN])
+                sentence_word_indices.insert(0, self.language_to_index[self.START_TOKEN])
             if end_token:
-                sentence_word_indicies.append(self.language_to_index[self.END_TOKEN])
-            for _ in range(len(sentence_word_indicies), self.max_sequence_length):
-                sentence_word_indicies.append(self.language_to_index[self.PADDING_TOKEN])
-            return torch.tensor(sentence_word_indicies)
+                sentence_word_indices.append(self.language_to_index[self.END_TOKEN])
+            for _ in range(len(sentence_word_indices), self.max_sequence_length):
+                sentence_word_indices.append(self.language_to_index[self.PADDING_TOKEN])
+            return torch.tensor(sentence_word_indices)
+
+        def custom_stack(tensors, padding_value=0):
+            max_length = max(len(t) for t in tensors)
+            stacked_tensors = []
+            for t in tensors:
+                if len(t) < max_length:
+                    # Pad the sequence if it's shorter than the maximum length
+                    pad_length = max_length - len(t)
+                    padded_sequence = torch.nn.functional.pad(t, (0, pad_length), value=padding_value)
+                    stacked_tensors.append(padded_sequence)
+                elif len(t) > max_length:
+                    # Truncate the sequence if it's longer than the maximum length
+                    truncated_sequence = t[:max_length]
+                    stacked_tensors.append(truncated_sequence)
+                else:
+                    stacked_tensors.append(t)
+            return torch.stack(stacked_tensors)
+
 
         tokenized = []
         for sentence_num in range(len(batch)):
-            tokenized.append( tokenize(batch[sentence_num], start_token, end_token) )
-        tokenized = torch.stack(tokenized)
+            tokenized.append(tokenize(batch[sentence_num], start_token, end_token))
+        # fill in the rest with padding
+        for _ in range(len(tokenized), 128):
+            tokenized.append(torch.tensor([self.language_to_index[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
+        tokenized = custom_stack(tokenized)
         return tokenized.to(get_device())
     
     def forward(self, x, start_token, end_token): # sentence
@@ -277,7 +298,7 @@ class Transformer(nn.Module):
                 drop_prob, 
                 num_layers,
                 max_sequence_length, 
-                kn_vocab_size,
+                b_vocab_size,
                 a2i,
                 b2i,
                 START_TOKEN, 
@@ -287,7 +308,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.encoder = Encoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, a2i, START_TOKEN, END_TOKEN, PADDING_TOKEN)
         self.decoder = Decoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, b2i, START_TOKEN, END_TOKEN, PADDING_TOKEN)
-        self.linear = nn.Linear(d_model, kn_vocab_size)
+        self.linear = nn.Linear(d_model, b_vocab_size)
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     def forward(self, 
