@@ -5,3 +5,4 @@ requests
 transformers
 tokenizers
 selenium
+BeautifulSoup4

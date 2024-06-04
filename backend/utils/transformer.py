@@ -63,7 +63,7 @@ class SnippetEmbedding(nn.Module):
         for seq_num in range(len(batch)):
             tokenized.append(tokenize(batch[seq_num], start_token, end_token))
         # fill in the rest with padding
-        for _ in range(len(tokenized), 30):
+        for _ in range(len(tokenized), 128):
             tokenized.append(torch.tensor([self.language_to_index[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
         tokenized = torch.stack(tokenized)
         return tokenized.to(get_device())
