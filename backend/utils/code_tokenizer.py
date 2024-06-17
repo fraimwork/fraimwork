@@ -18,7 +18,7 @@ class CodeTokenizer:
     
     def tokenize(self, code):
         intitial_pass = list(lex(code, self.lexer))
-        # After the initial pass, we will have a second pass where we BPE tokenize all Name, Literal, and Text tokens
+        # After the initial pass, we will have a second pass where we BPE tokenize all custom-named tokens (comments, variable names, strings etc.)
         for token in intitial_pass:
             if self.is_further_lexable(token):
                 encoded_input = self.subword_tokenizer(token[1])
