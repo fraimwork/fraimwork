@@ -170,13 +170,13 @@ class Encoder(nn.Module):
             drop_prob, 
             num_layers,
             max_sequence_length,
-            language_to_index,
+            tokenizer,
             START_TOKEN,
             END_TOKEN, 
             PADDING_TOKEN
             ):
         super().__init__()
-        self.sentence_embedding = SnippetEmbedding(max_sequence_length, d_model, language_to_index, START_TOKEN, END_TOKEN, PADDING_TOKEN)
+        self.sentence_embedding = SnippetEmbedding(max_sequence_length, d_model, tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
         self.layers = SequentialEncoder(*[EncoderLayer(d_model, ffn_hidden, num_heads, drop_prob) for _ in range(num_layers)])
 
     def forward(self, x, self_attention_mask, start_token, end_token):
@@ -259,13 +259,13 @@ class Decoder(nn.Module):
             drop_prob, 
             num_layers,
             max_sequence_length,
-            language_to_index,
+            tokenizer,
             START_TOKEN,
             END_TOKEN, 
             PADDING_TOKEN
         ):
         super().__init__()
-        self.sentence_embedding = SnippetEmbedding(max_sequence_length, d_model, language_to_index, START_TOKEN, END_TOKEN, PADDING_TOKEN)
+        self.sentence_embedding = SnippetEmbedding(max_sequence_length, d_model, tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
         self.layers = SequentialDecoder(*[DecoderLayer(d_model, ffn_hidden, num_heads, drop_prob) for _ in range(num_layers)])
 
     def forward(self, x, y, self_attention_mask, cross_attention_mask, start_token, end_token):
