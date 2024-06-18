@@ -5,6 +5,8 @@ from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
 
+from backend.utils.code_tokenizer import CodeTokenizer
+
 def get_device():
     return torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -36,12 +38,12 @@ class PositionalEncoding(nn.Module):
 
 class SnippetEmbedding(nn.Module):
     "For a given snippet, create an embedding"
-    def __init__(self, max_sequence_length, d_model, language_to_index, START_TOKEN, END_TOKEN, PADDING_TOKEN):
+    def __init__(self, max_sequence_length, d_model, tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN):
         super().__init__()
-        self.vocab_size = len(language_to_index)
+        self.vocab_size = len(tokenizer)
         self.max_sequence_length = max_sequence_length
         self.embedding = nn.Embedding(self.vocab_size, d_model)
-        self.language_to_index = language_to_index
+        self.language_to_index = tokenizer
         self.position_encoder = PositionalEncoding(d_model, max_sequence_length)
         self.dropout = nn.Dropout(p=0.1)
         self.START_TOKEN = START_TOKEN
@@ -50,14 +52,14 @@ class SnippetEmbedding(nn.Module):
     
     def batch_tokenize(self, batch, start_token, end_token):
         def tokenize(sentence, start_token, end_token):
-            sentence_word_indices = [self.language_to_index[token] for token in list(sentence)]
+            seq_token_indices = [self.language_to_index[token] for token in list(sentence)]
             if start_token:
-                sentence_word_indices.insert(0, self.language_to_index[self.START_TOKEN])
+                seq_token_indices.insert(0, self.language_to_index[self.START_TOKEN])
             if end_token:
-                sentence_word_indices.append(self.language_to_index[self.END_TOKEN])
-            for _ in range(len(sentence_word_indices), self.max_sequence_length):
-                sentence_word_indices.append(self.language_to_index[self.PADDING_TOKEN])
-            return torch.tensor(sentence_word_indices)
+                seq_token_indices.append(self.language_to_index[self.END_TOKEN])
+            for _ in range(len(seq_token_indices), self.max_sequence_length):
+                seq_token_indices.append(self.language_to_index[self.PADDING_TOKEN])
+            return torch.tensor(seq_token_indices)
 
         tokenized = []
         for seq_num in range(len(batch)):
@@ -280,17 +282,16 @@ class Transformer(nn.Module):
                 drop_prob, 
                 num_layers,
                 max_sequence_length, 
-                b_vocab_size,
-                a2i,
-                b2i,
+                a_tokenizer: CodeTokenizer,
+                b_tokenizer: CodeTokenizer,
                 START_TOKEN, 
                 END_TOKEN, 
-                PADDING_TOKEN
+                PADDING_TOKEN,
                 ):
         super().__init__()
-        self.encoder = Encoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, a2i, START_TOKEN, END_TOKEN, PADDING_TOKEN)
-        self.decoder = Decoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, b2i, START_TOKEN, END_TOKEN, PADDING_TOKEN)
-        self.linear = nn.Linear(d_model, b_vocab_size)
+        self.encoder = Encoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, a_tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
+        self.decoder = Decoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, b_tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
+        self.linear = nn.Linear(d_model, len(b_tokenizer))
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     def forward(self, 
