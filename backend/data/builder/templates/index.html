@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraimwork Sample Collector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Fraimwork Sample Collector</h1>
+        <form action="{{ url_for('add_sample') }}" method="POST">
+            <div>
+                <label for="dart">Dart Code</label>
+                <textarea id="dart" name="dart" rows="10" required></textarea>
+            </div>
+            <div>
+                <label for="javascript">JavaScript Code</label>
+                <textarea id="javascript" name="javascript" rows="10" required></textarea>
+            </div>
+            <button type="submit">Add Sample</button>
+        </form>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul>
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+        <a href="{{ url_for('samples') }}">View Samples</a>
+    </div>
+</body>
+</html>
