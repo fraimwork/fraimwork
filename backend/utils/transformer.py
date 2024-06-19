@@ -38,12 +38,12 @@ class PositionalEncoding(nn.Module):
 
 class SnippetEmbedding(nn.Module):
     "For a given snippet, create an embedding"
-    def __init__(self, max_sequence_length, d_model, tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN):
+    def __init__(self, max_sequence_length, d_model, tokenizer: CodeTokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN):
         super().__init__()
         self.vocab_size = len(tokenizer)
         self.max_sequence_length = max_sequence_length
         self.embedding = nn.Embedding(self.vocab_size, d_model)
-        self.language_to_index = tokenizer
+        self.tokenizer = tokenizer
         self.position_encoder = PositionalEncoding(d_model, max_sequence_length)
         self.dropout = nn.Dropout(p=0.1)
         self.START_TOKEN = START_TOKEN
@@ -51,22 +51,12 @@ class SnippetEmbedding(nn.Module):
         self.PADDING_TOKEN = PADDING_TOKEN
     
     def batch_tokenize(self, batch, start_token, end_token):
-        def tokenize(sentence, start_token, end_token):
-            seq_token_indices = [self.language_to_index[token] for token in list(sentence)]
-            if start_token:
-                seq_token_indices.insert(0, self.language_to_index[self.START_TOKEN])
-            if end_token:
-                seq_token_indices.append(self.language_to_index[self.END_TOKEN])
-            for _ in range(len(seq_token_indices), self.max_sequence_length):
-                seq_token_indices.append(self.language_to_index[self.PADDING_TOKEN])
-            return torch.tensor(seq_token_indices)
-
         tokenized = []
         for seq_num in range(len(batch)):
-            tokenized.append(tokenize(batch[seq_num], start_token, end_token))
+            tokenized.append(self.tokenizer.tokenize(batch[seq_num]))
         # fill in the rest with padding
         for _ in range(len(tokenized), 128):
-            tokenized.append(torch.tensor([self.language_to_index[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
+            tokenized.append(torch.tensor([self.tokenizer[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
         tokenized = torch.stack(tokenized)
         return tokenized.to(get_device())
     
