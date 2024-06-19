@@ -61,7 +61,11 @@ class CodeTokenizer(Vocabulary):
                 for token in self.further_lexed(token):
                     yield token
             else:
-                yield token[1]
+                if is_token_subtype(token[0], pygments.token.Whitespace):
+                    for char in token[1]:
+                        yield char
+                else:
+                    yield token[1]
     
     def vectorize(self, code):
         return [index for index, _ in self.tokenize(code)]
