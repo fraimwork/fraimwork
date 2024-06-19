@@ -25,16 +25,19 @@ class Vocabulary:
         return self.index_to_token[index]
 
 class CodeTokenizer(Vocabulary):
-    def __init__(self, lexer, framework_vocab=[], language_vocab=[]):
+    def __init__(self, lexer, framework_vocab=[], language_vocab=[], START_TOKEN='<START>', END_TOKEN='<END>', PAD_TOKEN='<PAD>'):
         self.lexer = lexer
         self.subword_tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         subword_vocab = {token: index for index, token in enumerate(self.subword_tokenizer.get_vocab())}
         subword_vocab = [token for token, _ in sorted(subword_vocab.items(), key=lambda x: x[1])]
-        self.vocab = subword_vocab + language_vocab + framework_vocab
+        custom_tokens = [START_TOKEN, END_TOKEN, PAD_TOKEN]
+        self.vocab = custom_tokens + subword_vocab + language_vocab + framework_vocab
+        self.custom_vocab = Vocabulary(custom_tokens)
         self.subword_vocab = Vocabulary(subword_vocab)
         self.framework_vocab = Vocabulary(framework_vocab)
         self.language_vocab = Vocabulary(language_vocab)
-        self.language_offset = len(subword_vocab)
+        self.subword_offset = len(custom_tokens)
+        self.language_offset = self.subword_offset + len(subword_vocab)
         self.framework_offset = self.language_offset + len(language_vocab)
         super().__init__(self.vocab)
     
@@ -53,8 +56,8 @@ class CodeTokenizer(Vocabulary):
         for token in tokens:
             yield token
     
-    def tokenize(self, code):
-        intitial_pass = list(lex(code, self.lexer))
+    def _tokenize(self, code):
+        intitial_pass = list(lex(code, self.lexer)) if self.lexer is not None else zip([None]*len(code), code)
         # After the initial pass, we will have a second pass where we BPE tokenize all custom-named tokens (comments, variable names, strings etc.)
         for token in intitial_pass:
             if self.is_further_lexable(token):
@@ -66,6 +69,10 @@ class CodeTokenizer(Vocabulary):
                         yield char
                 else:
                     yield token[1]
+    
+    def tokenize(self, code):
+        tokenized = self._tokenize(code)
+        return [token for token in tokenized]
     
     def vectorize(self, code):
         return [index for index, _ in self.tokenize(code)]

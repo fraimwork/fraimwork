@@ -4,8 +4,7 @@ import math
 from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
-
-from backend.utils.code_tokenizer import CodeTokenizer
+from utils.code_tokenizer import CodeTokenizer
 
 def get_device():
     return torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -53,10 +52,13 @@ class SnippetEmbedding(nn.Module):
     def batch_tokenize(self, batch, start_token, end_token):
         tokenized = []
         for seq_num in range(len(batch)):
-            tokenized.append(self.tokenizer.tokenize(batch[seq_num]))
+            tokenized.append([self.tokenizer[token] for token in self.tokenizer.tokenize(batch[seq_num])])
+        # normalize the length of the tokenized sequences
+        for seq_num in range(len(tokenized)):
+            tokenized[seq_num] = torch.tensor(tokenized[seq_num] +[self.tokenizer[self.PADDING_TOKEN] for _ in range(self.max_sequence_length - len(tokenized[seq_num]))])
         # fill in the rest with padding
-        for _ in range(len(tokenized), 128):
-            tokenized.append(torch.tensor([self.tokenizer[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
+        # for _ in range(len(tokenized), 2):
+        #     tokenized.append(torch.tensor([self.tokenizer[self.PADDING_TOKEN] for _ in range(self.max_sequence_length)]))
         tokenized = torch.stack(tokenized)
         return tokenized.to(get_device())
     
@@ -282,7 +284,7 @@ class Transformer(nn.Module):
         self.encoder = Encoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, a_tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
         self.decoder = Decoder(d_model, ffn_hidden, num_heads, drop_prob, num_layers, max_sequence_length, b_tokenizer, START_TOKEN, END_TOKEN, PADDING_TOKEN)
         self.linear = nn.Linear(d_model, len(b_tokenizer))
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        self.device = get_device()
 
     def forward(self, 
                 x, 
