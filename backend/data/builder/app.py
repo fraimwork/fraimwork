@@ -39,4 +39,4 @@ def samples():
     return render_template('samples.html', samples=samples)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5100)
