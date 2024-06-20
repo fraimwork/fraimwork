@@ -17,7 +17,7 @@ class FrameworkClassifier(nn.Module):
     
     def train(self, x, y, epochs=10):
         criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-3)
         for epoch in range(epochs):
             optimizer.zero_grad()
             outputs = self.forward(x)

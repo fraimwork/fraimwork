@@ -33,7 +33,7 @@ class CodeTokenizer(Vocabulary):
             subword_vocab = [token for token, _ in sorted(subword_vocab.items(), key=lambda x: x[1])]
         else:
             subword_vocab = []
-        custom_tokens = [START_TOKEN, END_TOKEN, PAD_TOKEN]
+        custom_tokens = [PAD_TOKEN, START_TOKEN, END_TOKEN]
         self.vocab = custom_tokens + subword_vocab + language_vocab + framework_vocab
         self.custom_vocab = Vocabulary(custom_tokens)
         self.subword_vocab = Vocabulary(subword_vocab)
