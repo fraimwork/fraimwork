@@ -1,5 +1,6 @@
 torch
 numpy
+pandas
 flask
 requests
 transformers
@@ -7,3 +8,4 @@ tokenizers
 selenium
 BeautifulSoup4
 pygments
+esprima
