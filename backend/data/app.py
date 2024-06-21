@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
 
-CSV_FILE = '../raw/samples.csv'
+CSV_FILE = './raw/samples.csv'
 
 # Ensure the CSV file exists
 if not os.path.exists(CSV_FILE):
