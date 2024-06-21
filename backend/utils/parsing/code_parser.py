@@ -3,6 +3,7 @@ import ast, esprima, json, subprocess
 import networkx as nx
 from functools import cache
 from utils.graphs.dag_utils import collapse_sccs, all_topological_sorts
+from itertools import product
 
 class CodeParser(ABC):
     def __init__(self, code: str):
@@ -59,7 +60,7 @@ class PythonParser(CodeParser):
     def get_ast(self):
         return ast.parse(self.code).body
 
-class JavaScriptParser(CodeParser):
+class JavascriptParser(CodeParser):
     def get_ast(self):
         return esprima.parseScript(self.code).body
 
@@ -77,3 +78,6 @@ class DartParser(CodeParser):
             print(f"Error: {stderr}")
             return None
         return json.loads(stdout)
+
+def combine(parserA: CodeParser, parserB: CodeParser):
+    return list(product(parserA.all_permutations(), parserB.all_permutations()))

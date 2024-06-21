@@ -55,12 +55,12 @@ class CodeTokenizer(Vocabulary):
     def further_lexed(self, token):
         if is_token_subtype(token[0], pygments.token.Name):
             if token[1] in self.framework_vocab:
-                return [token[1]]
+                return [(self.framework_vocab[token[1]] + self.framework_offset, token[1])]
         encoded_input = self.subword_tokenizer(token[1])
         # Decode the input IDs to get subwords (tokens)
         tokens = self.subword_tokenizer.convert_ids_to_tokens(encoded_input['input_ids'], skip_special_tokens=True)
         for token in tokens:
-            yield token
+            yield (self.subword_vocab[token] + self.subword_offset, token)
     
     def _tokenize(self, code):
         intitial_pass = list(lex(code, self.lexer)) if self.lexer is not None else zip([None]*len(code), code)
@@ -72,16 +72,13 @@ class CodeTokenizer(Vocabulary):
             else:
                 if is_token_subtype(token[0], pygments.token.Whitespace):
                     for char in token[1]:
-                        yield char
+                        yield (self.language_vocab[' '] + self.language_offset, char)
                 else:
-                    yield token[1]
+                    yield (self.language_vocab[token[1]] + self.language_offset, token[1])
     
     def tokenize(self, code):
         tokenized = self._tokenize(code)
-        return [self.START_TOKEN] + [token for token in tokenized] + [self.END_TOKEN]
-    
-    def vectorize(self, code):
-        return [index for index, _ in self.tokenize(code)]
+        return [(1, self.START_TOKEN)] + [token for token in tokenized] + [(2, self.END_TOKEN)]
     
     def lex_code(self, code):
         return lex(code, self.lexer)
