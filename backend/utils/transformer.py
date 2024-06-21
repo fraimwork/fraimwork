@@ -1,8 +1,5 @@
-import numpy as np
-import torch
-import math
-from torch import nn
-from torch import Tensor
+import torch, math
+from torch import nn, Tensor
 import torch.nn.functional as F
 from utils.code_tokenizer import CodeTokenizer
 

@@ -33,6 +33,7 @@ class CodeTokenizer(Vocabulary):
             subword_vocab = [token for token, _ in sorted(subword_vocab.items(), key=lambda x: x[1])]
         else:
             subword_vocab = []
+        subword_vocab = ['<UNK>']
         custom_tokens = [PAD_TOKEN, START_TOKEN, END_TOKEN]
         self.vocab = custom_tokens + subword_vocab + language_vocab + framework_vocab
         self.custom_vocab = Vocabulary(custom_tokens)
@@ -56,11 +57,12 @@ class CodeTokenizer(Vocabulary):
         if is_token_subtype(token[0], pygments.token.Name):
             if token[1] in self.framework_vocab:
                 return [(self.framework_vocab[token[1]] + self.framework_offset, token[1])]
-        encoded_input = self.subword_tokenizer(token[1])
-        # Decode the input IDs to get subwords (tokens)
-        tokens = self.subword_tokenizer.convert_ids_to_tokens(encoded_input['input_ids'], skip_special_tokens=True)
-        for token in tokens:
-            yield (self.subword_vocab[token] + self.subword_offset, token)
+        return [(3, '<UNK>')]
+        # encoded_input = self.subword_tokenizer(token[1])
+        # # Decode the input IDs to get subwords (tokens)
+        # tokens = self.subword_tokenizer.convert_ids_to_tokens(encoded_input['input_ids'], skip_special_tokens=True)
+        # for token in tokens:
+        #     yield (self.subword_vocab[token] + self.subword_offset, token)
     
     def _tokenize(self, code):
         intitial_pass = list(lex(code, self.lexer)) if self.lexer is not None else zip([None]*len(code), code)
@@ -71,8 +73,11 @@ class CodeTokenizer(Vocabulary):
                     yield token
             else:
                 if is_token_subtype(token[0], pygments.token.Whitespace):
-                    for char in token[1]:
-                        yield (self.language_vocab[' '] + self.language_offset, char)
+                    if token[1] == '\n':
+                        yield (self.language_vocab['\n'] + self.language_offset, token[1])
+                    else:
+                        for char in token[1]:
+                            yield (self.language_vocab[' '] + self.language_offset, char)
                 else:
                     yield (self.language_vocab[token[1]] + self.language_offset, token[1])
     
