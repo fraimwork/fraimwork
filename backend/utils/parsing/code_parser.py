@@ -6,21 +6,17 @@ from utils.graphs.dag_utils import collapse_sccs, all_topological_sorts
 from itertools import product
 
 class CodeParser(ABC):
-    def __init__(self, code: str):
-        self.code = code
-    
     @abstractmethod
     @cache
-    def get_ast(self) -> list:
+    def get_ast(self, code) -> list:
         pass
     
     @cache
-    def get_dependency_graph(self):
+    def get_dependency_graph(self, code):
         G = nx.DiGraph()
         variables = {}
-        
         # Traverse AST to identify variable declarations and their dependencies
-        for statement in self.get_ast():
+        for statement in self.get_ast(code):
             if statement.type == 'VariableDeclaration':
                 for declaration in statement.declarations:
                     var_name = declaration.id.name
@@ -37,7 +33,6 @@ class CodeParser(ABC):
         G = collapse_sccs(G)
         return G
 
-    @cache
     def find_dependencies(self, expression):
         dependencies = []
         if expression.type == 'BinaryExpression':
@@ -53,19 +48,19 @@ class CodeParser(ABC):
         return dependencies
     
     @cache
-    def all_permutations(self):
-        return all_topological_sorts(self.get_dependency_graph())
+    def all_permutations(self, code):
+        return all_topological_sorts(self.get_dependency_graph(code))
 
 class PythonParser(CodeParser):
-    def get_ast(self):
-        return ast.parse(self.code).body
+    def get_ast(self, code):
+        return ast.parse(code).body
 
 class JavascriptParser(CodeParser):
-    def get_ast(self):
-        return esprima.parseScript(self.code).body
+    def get_ast(self, code):
+        return esprima.parseScript(code).body
 
 class DartParser(CodeParser):
-    def get_ast(self):
+    def get_ast(self, code):
         process = subprocess.Popen(
             ['dart', 'generate_ast.dart'],
             stdin=subprocess.PIPE,
@@ -73,11 +68,8 @@ class DartParser(CodeParser):
             stderr=subprocess.PIPE,
             text=True
         )
-        stdout, stderr = process.communicate(input=self.code)
+        stdout, stderr = process.communicate(input=code)
         if process.returncode != 0:
             print(f"Error: {stderr}")
             return None
         return json.loads(stdout)
-
-def combine(parserA: CodeParser, parserB: CodeParser):
-    return list(product(parserA.all_permutations(), parserB.all_permutations()))

@@ -1,4 +1,4 @@
-import torch, math
+import torch, math, networkx as nx
 from torch import nn, Tensor
 import torch.nn.functional as F
 from utils.code_tokenizer import CodeTokenizer
@@ -18,7 +18,7 @@ def scaled_dot_product(q: Tensor, k: Tensor, v: Tensor, mask:Tensor=None):
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_sequence_length):
-        super().__init__()
+        super(PositionalEncoding, self).__init__()
         self.max_sequence_length = max_sequence_length
         self.d_model = d_model
 
@@ -32,6 +32,32 @@ class PositionalEncoding(nn.Module):
         PE = torch.flatten(stacked, start_dim=1, end_dim=2)
         return PE
 
+class StructuralEncoding(nn.Module):
+    def __init__(self, d_model, max_sequence_length, max_relative_positions=10):
+        super(StructuralEncoding, self).__init__()
+        self.d_model = d_model
+        self.max_relative_positions = max_relative_positions
+        self.relative_position_embeddings = nn.Embedding(2 * max_relative_positions + 1, d_model)
+
+    def forward(self, code_structure: nx.DiGraph):
+        # Get adjacency matrix of the graph
+        adj_matrix = nx.adjacency_matrix(code_structure).todense()
+        num_nodes = adj_matrix.shape[0]
+        # Initialize relative position matrix
+        rel_pos_matrix = torch.zeros((num_nodes, num_nodes), dtype=torch.long)
+        # Compute relative positions
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                rel_pos = j - i
+                if rel_pos < -self.max_relative_positions:
+                    rel_pos = -self.max_relative_positions
+                elif rel_pos > self.max_relative_positions:
+                    rel_pos = self.max_relative_positions
+                rel_pos_matrix[i, j] = rel_pos + self.max_relative_positions
+        # Get the relative position encodings
+        rel_pos_encodings = self.relative_position_embeddings(rel_pos_matrix)
+        return rel_pos_encodings
+
 class SnippetEmbedding(nn.Module):
     "For a given snippet, create an embedding"
     def __init__(self, max_sequence_length, d_model, tokenizer: CodeTokenizer):
@@ -41,12 +67,11 @@ class SnippetEmbedding(nn.Module):
         self.embedding = nn.Embedding(self.vocab_size, d_model)
         self.tokenizer = tokenizer
         self.position_encoder = PositionalEncoding(d_model, max_sequence_length)
+        self.structural_encoder = StructuralEncoding(d_model, max_relative_positions=max_sequence_length//2)
         self.dropout = nn.Dropout(p=0.1)
     
     def batch_tokenize(self, batch):
-        tokenized = []
-        for seq_num in range(len(batch)):
-            tokenized.append([token[0] for token in self.tokenizer.tokenize(batch[seq_num])])
+        tokenized = [[token[0] for token in self.tokenizer.tokenize(batch[seq_num])] for seq_num in range(len(batch))]
         # normalize the length of the tokenized sequences
         for seq_num in range(len(tokenized)):
             if len(tokenized[seq_num]) > self.max_sequence_length:
@@ -62,7 +87,8 @@ class SnippetEmbedding(nn.Module):
         x = self.batch_tokenize(x)
         x = self.embedding(x)
         pos = self.position_encoder().to(get_device())
-        x = self.dropout(x + pos)
+        struct = self.structural_encoder().to(get_device())
+        x = self.dropout(x + pos + struct)
         return x
 
 

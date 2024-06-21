@@ -1,10 +1,11 @@
-import pygments.lexers
-import pygments.token
+import pygments.lexers, pygments.token, pygments
 from transformers import AutoTokenizer
-import pygments
 from pygments import lex
 from pygments.token import is_token_subtype
 from collections import defaultdict
+from utils.parsing.code_parser import CodeParser
+import networkx as nx
+from typing import Optional
 
 class Vocabulary:
     def __init__(self, vocab):
@@ -21,11 +22,15 @@ class Vocabulary:
     def __contains__(self, token):
         return token in self.token_to_index
     
+    # define addition
+    def __add__(self, other):
+        return Vocabulary(self.vocab + other.vocab)
+    
     def get_token(self, index):
         return self.index_to_token[index]
 
 class CodeTokenizer(Vocabulary):
-    def __init__(self, lexer, framework_vocab=[], language_vocab=[], START_TOKEN='<START>', END_TOKEN='<END>', PAD_TOKEN='<PAD>'):
+    def __init__(self, lexer, framework_vocab=[], language_vocab=[], code_parser:Optional[CodeParser]=None, START_TOKEN='<START>', END_TOKEN='<END>', PAD_TOKEN='<PAD>'):
         self.lexer = lexer
         if lexer is not None:
             self.subword_tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
@@ -46,6 +51,7 @@ class CodeTokenizer(Vocabulary):
         self.START_TOKEN = START_TOKEN
         self.END_TOKEN = END_TOKEN
         self.PAD_TOKEN = PAD_TOKEN
+        self.code_parser = code_parser
         super().__init__(self.vocab)
     
     def is_further_lexable(self, token):
@@ -87,3 +93,9 @@ class CodeTokenizer(Vocabulary):
     
     def lex_code(self, code):
         return lex(code, self.lexer)
+    
+    def make_graph(self, code) -> nx.DiGraph:
+        if self.code_parser is None:
+            raise ValueError('Code parser not provided')
+        self.code_parser.code = code
+        return self.code_parser.get_dependency_graph()
