@@ -57,7 +57,7 @@ class PythonParser(CodeParser):
 
 class JavascriptParser(CodeParser):
     def get_ast(self, code):
-        return esprima.parseScript(code).body
+        return esprima.parseScript(code, loc=True).body
 
 class DartParser(CodeParser):
     def get_ast(self, code):
