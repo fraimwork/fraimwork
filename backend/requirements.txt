@@ -9,3 +9,5 @@ selenium
 BeautifulSoup4
 pygments
 esprima
+pygls
+pyright
