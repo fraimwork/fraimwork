@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request
 import requests
-from backend.utils.transformer import Transformer
 from utils.returny import create_pull_request
 from utils.training import download_training_data
 import json
+import networkx as nx
 import os
 
 app = Flask(__name__)
@@ -27,6 +27,23 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 def index():
     return render_template('index.html')
 
+def getFileDAG(path):
+    G = nx.DiGraph()
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(".dart"):
+                with open(os.path.join(root, file), 'r') as f:
+                    lines = f.readlines()
+                    for i in range(len(lines)):
+                        if i == 0:
+                            G.add_edge(file, lines[i])
+                        else:
+                            G.add_edge(lines[i-1], lines[i])
+
+def translate_code(source, target, code):
+    # Prompt google gemini
+    pass
+
 @app.route('/translate_and_pr', methods=['POST'])
 def translate_and_pr():
     repo_link = request.form['repo']
@@ -37,6 +54,12 @@ def translate_and_pr():
     response = requests.get(repo_link)
     if response.status_code != 200:
         return render_template('result.html', result="Failed to fetch repository")
+    # Clone the repository
+    os.system(f"git clone {repo_link}")
+    # Change directory
+    os.chdir(repo_link.split('/')[-1].split('.')[0])
+    dag = getFileDAG(os.getcwd())
+    reverse_level_order = list(reversed(nx.topological_sort(dag)))
     # Run the model and save the translated code to some path
     ...
     translated_code = "path/to/translated/code"
@@ -50,33 +73,6 @@ def translate_and_pr():
         body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated."
     )
     return render_template('result.html', result="Success")
-
-@app.route('/train', methods=['POST'])
-def train_model():
-    if 'source' not in request.form or 'target' not in request.form:
-        return failure("Source and target frameworks must be specified.")
-    source = request.form['source']
-    target = request.form['target']
-    if source == target:
-        return failure("Source and target frameworks must be different.")
-    # Check if model exists
-    if f"models/{source}_to_{target}.pt" in os.listdir("models"):
-        return render_template('result.html', message="Model already exists.")
-
-    # Load training data
-    download_training_data()
-
-    # Generate vocabularies
-    START_TOKEN = '<START>'
-    PADDING_TOKEN = '<PAD>'
-    END_TOKEN = '<END>'
-    NEWLINE_TOKEN = '<NWLN>'
-    END_OF_FILE_TOKEN = '<EOF>'
-    CHANGE_DIR_TOKEN = '<CD|>'
-    GENERICS = [START_TOKEN, PADDING_TOKEN, END_TOKEN, NEWLINE_TOKEN, END_OF_FILE_TOKEN]
-
-
-
 
 
 if __name__ == '__main__':
