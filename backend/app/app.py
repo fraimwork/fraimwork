@@ -1,9 +1,7 @@
 from flask import Flask, render_template, request
 import requests
 from utils.returny import create_pull_request
-from utils.training import download_training_data
 import json
-import networkx as nx
 import os
 
 app = Flask(__name__)
@@ -27,18 +25,14 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 def index():
     return render_template('index.html')
 
-def getFileDAG(path):
-    G = nx.DiGraph()
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            if file.endswith(".dart"):
-                with open(os.path.join(root, file), 'r') as f:
-                    lines = f.readlines()
-                    for i in range(len(lines)):
-                        if i == 0:
-                            G.add_edge(file, lines[i])
-                        else:
-                            G.add_edge(lines[i-1], lines[i])
+def get_working_dir(framework):
+    match framework:
+        case "flutter":
+            return "./lib"
+        case "react-native":
+            return "./src"
+        case _:
+            return None
 
 def translate_code(source, target, code):
     # Prompt google gemini
@@ -58,8 +52,7 @@ def translate_and_pr():
     os.system(f"git clone {repo_link}")
     # Change directory
     os.chdir(repo_link.split('/')[-1].split('.')[0])
-    dag = getFileDAG(os.getcwd())
-    reverse_level_order = list(reversed(nx.topological_sort(dag)))
+    reverse_level_order = os.walk(top=os.getcwd(), topdown=False)
     # Run the model and save the translated code to some path
     ...
     translated_code = "path/to/translated/code"
