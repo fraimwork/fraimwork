@@ -14,7 +14,8 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel(MODEL_NAME)
+translator = genai.GenerativeModel(MODEL_NAME)
+pm = genai.GenerativeModel(MODEL_NAME)
 
 extensions_of = {
     "flutter": [".dart"],
@@ -43,9 +44,9 @@ def index():
 def get_working_dir(framework):
     match framework:
         case "flutter":
-            return "./lib"
+            return "lib"
         case "react-native":
-            return "./src"
+            return "src"
         case _:
             return None
 
@@ -75,15 +76,28 @@ def translate_code(source, target, code):
     translated_code = extract_translated_code(response)
     return translated_code
 
-# Helper functions (to be implemented based on the Gemini API)
 def gemini_api_call(prompt):
-    return model.generate_content(prompt).text
+    return translator.generate_content(prompt).text
 
-def extract_translated_code(response):
-    text = response
+def extract_translated_code(text):
     # Split by  markdown ticks to get the code
     code = text.split("```")[1].split("```")[0]
     return code
+
+def generate_tree_structure(path, indent=''):
+    result = ''
+    items = os.listdir(path)
+    for index, item in enumerate(items):
+        item_path = os.path.join(path, item)
+        if os.path.isdir(item_path):
+            result += f"{indent}├── {item}/\n"
+            result += generate_tree_structure(item_path, indent + '│   ')
+        else:
+            result += f"{indent}├── {item}\n"
+    return result
+
+def framework_tree_structure(path, framework):
+    return generate_tree_structure(f'{path}/{get_working_dir(framework)}')
 
 @app.route('/translate', methods=['GET'])
 def translate():
