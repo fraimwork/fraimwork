@@ -2,8 +2,8 @@ from flask import Flask, render_template, request
 from utils.returny import create_pull_request
 import json, os, requests
 from dotenv import load_dotenv
-from google.cloud import aiplatform
 from git import Repo
+import google.generativeai as genai
 
 load_dotenv()  # Load environment variables from .env
 
@@ -13,7 +13,10 @@ MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
-languages_of = {
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+extensions_of = {
     "flutter": [".dart"],
     "react-native": [".ts, .js, .tsx, .jsx"]
     # Add more frameworks and their corresponding languages here
@@ -25,13 +28,17 @@ ignored_files_of = {
     # Add more frameworks and their corresponding ignored files here
 }
 
-aiplatform.init(project=PROJECT_ID, location=LOCATION)
-
 app = Flask(__name__)
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html')
+    if request.method == 'GET':
+        return render_template('index.html')
+    code = request.form['code']
+    source = "flutter"  # Replace with actual framework detection logic
+    target = "react-native"  # Replace with actual framework detection logic
+    translated_code = translate_code(source, target, code)
+    return render_template('result.html', result=translated_code, prompt=code)
 
 def get_working_dir(framework):
     match framework:
@@ -45,37 +52,22 @@ def get_working_dir(framework):
 def translate_code(source, target, code):
     # Prepare the prompt for Gemini
     prompt = f"Translate the following {source} code to {target}: {code}"
-
     # Send the request to the Gemini API (replace with actual API call)
     response = gemini_api_call(prompt)
-
     # Extract the translated code from the response
     translated_code = extract_translated_code(response)
-
     return translated_code
 
 # Helper functions (to be implemented based on the Gemini API)
 def gemini_api_call(prompt):
-    response = requests.post("https://api.gemini.google.com/v1/generate", headers={
-        "Authorization": f"Bearer {API_KEY}",  # Replace with your API key
-        "Content-Type": "application/json"
-    }, json={
-        "prompt": prompt,
-    })
-
-    if response.status_code != 200:
-        raise Exception(f"Gemini API request failed with status code: {response.status_code}")
-
-    return response.json()  # Return the JSON response
+    return model.generate_content(prompt).text
 
 
 def extract_translated_code(response):
-    text = response["choices"][0]["text"]
+    text = response
     # Split by  markdown ticks to get the code
     code = text.split("```")[1].split("```")[0]
     return code
-
-
 
 @app.route('/translate', methods=['GET'])
 def translate():
@@ -92,6 +84,7 @@ def translate():
     local_repo_path = f'./tmp/{repo_name}'
     Repo.clone_from(repo_url, local_repo_path)
     # 2. Identify relevant files for translation (based on framework detection)
+
     # ... (Logic to determine which files to translate)
     # 3. Translate files using Vertex Gemini
     for file_path in files_to_translate:
@@ -108,7 +101,7 @@ def translate():
         return "Translation and PR process initiated", 200
 
     create_pull_request(
-        repo_link=repo_link,
+        repo_link=repo_url,
         base_branch=base_branch,
         new_branch=created_branch,
         title=f"Translation from {source.capitalize()} => {target.capitalize()}",
