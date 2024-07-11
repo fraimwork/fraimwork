@@ -14,7 +14,7 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel(MODEL_NAME)
 
 extensions_of = {
     "flutter": [".dart"],
@@ -49,6 +49,23 @@ def get_working_dir(framework):
         case _:
             return None
 
+def wipe_repo(repo_path):
+    # remove all files except for .git folder
+    for root, dirs, files in os.walk(repo_path):
+        for file in files:
+            os.remove(os.path.join(root, file))
+        for dir in dirs:
+            if dir == ".git": continue
+            os.rmdir(os.path.join(root, dir))
+
+def prepare_repo(repo_path, framework):
+    working_dir = get_working_dir(framework)
+    if not working_dir:
+        return "Invalid framework"
+    wipe_repo(repo_path)
+    os.makedirs(f"{repo_path}/{working_dir}", exist_ok=True)
+    return "Repo prepared"
+
 def translate_code(source, target, code):
     # Prepare the prompt for Gemini
     prompt = f"Translate the following {source} code to {target}: {code}"
@@ -61,7 +78,6 @@ def translate_code(source, target, code):
 # Helper functions (to be implemented based on the Gemini API)
 def gemini_api_call(prompt):
     return model.generate_content(prompt).text
-
 
 def extract_translated_code(response):
     text = response
@@ -104,7 +120,7 @@ def translate():
         repo_link=repo_url,
         base_branch=base_branch,
         new_branch=created_branch,
-        title=f"Translation from {source.capitalize()} => {target.capitalize()}",
+        title=f"Translation from {source.capitalize()} to {target.capitalize()}",
         body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated."
     )
     return render_template('result.html', result="Success")
