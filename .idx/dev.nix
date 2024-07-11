@@ -6,11 +6,9 @@
 
   # Use https://search.nixos.org/packages to find packages
   packages = [
-    # pkgs.go
-    # pkgs.python311
-    # pkgs.python311Packages.pip
-    # pkgs.nodejs_20
-    # pkgs.nodePackages.nodemon
+    pkgs.python311 
+    pkgs.python311Packages.pip
+    pkgs.nodejs_20
   ];
 
   # Sets environment variables in the workspace
@@ -18,7 +16,12 @@
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
-      # "vscodevim.vim"
+      "ms-python.python" # For Python development
+      "donjayamanne.githistory" # For Git integration
+      "esbenp.prettier-vscode" # For code formatting
+      "dbaeumer.vscode-eslint" # For JavaScript linting
+      "ms-python.debugpy"
+      "PKief.material-icon-theme"
     ];
 
     # Enable previews
@@ -42,13 +45,17 @@
     workspace = {
       # Runs when a workspace is first created
       onCreate = {
-        # Example: install JS dependencies from NPM
-        # npm-install = "npm install";
+        # install Python dependencies
+        pip-install = "cd backend/app && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt";
+        # install Node.js dependencies
+        npm-install = "cd frontend && npm install";
       };
       # Runs when the workspace is (re)started
       onStart = {
-        # Example: start a background task to watch and re-build backend code
-        # watch-backend = "npm run watch-backend";
+        # install Python dependencies
+        pip-install = "cd backend/app && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt";
+        # install Node.js dependencies
+        npm-install = "cd frontend && npm install";
       };
     };
   };

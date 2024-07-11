@@ -11,6 +11,7 @@ PROJECT_ID = os.getenv('PROJECT_ID')
 LOCATION = os.getenv('LOCATION')
 MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+API_KEY = os.getenv('API_KEY')
 
 languages_of = {
     "flutter": [".dart"],
@@ -42,25 +43,37 @@ def get_working_dir(framework):
             return None
 
 def translate_code(source, target, code):
-    # 1. Prepare the prompt for Gemini
+    # Prepare the prompt for Gemini
     prompt = f"Translate the following {source} code to {target}: {code}"
 
-    # 2. Send the request to the Gemini API (replace with actual API call)
+    # Send the request to the Gemini API (replace with actual API call)
     response = gemini_api_call(prompt)
 
-    # 3. Extract the translated code from the response
+    # Extract the translated code from the response
     translated_code = extract_translated_code(response)
 
     return translated_code
 
 # Helper functions (to be implemented based on the Gemini API)
 def gemini_api_call(prompt):
-    # ... (Code to interact with the Gemini API)
-    pass
+    response = requests.post("https://api.gemini.google.com/v1/generate", headers={
+        "Authorization": f"Bearer {API_KEY}",  # Replace with your API key
+        "Content-Type": "application/json"
+    }, json={
+        "prompt": prompt,
+    })
+
+    if response.status_code != 200:
+        raise Exception(f"Gemini API request failed with status code: {response.status_code}")
+
+    return response.json()  # Return the JSON response
+
 
 def extract_translated_code(response):
-    # ... (Code to parse the API response and extract the translated code)
-    pass
+    text = response["choices"][0]["text"]
+    # Split by  markdown ticks to get the code
+    code = text.split("```")[1].split("```")[0]
+    return code
 
 
 
@@ -87,7 +100,7 @@ def translate():
         # Call Vertex Gemini API for translation (replace with actual API call)
         translated_code = translate_code(source, target, code) 
         with open(file_path, 'w') as f:
-            f.write(f.write(translated_code)
+            f.write(translated_code)
         # 4. Create a new repository and push translated code
         # ... (Logic to create a new repo and push changes)
         # 5. Create a pull request
