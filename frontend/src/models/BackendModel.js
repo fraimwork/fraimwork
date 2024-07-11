@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Define the base URL for the Flask backend API
-const API_BASE_URL = 'https://your-cloud-run-service-url.run.app';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL; 
 
 const handleError = (error) => {
   console.error('Error:', error);
@@ -10,7 +10,7 @@ const handleError = (error) => {
 };
 
 export const translate = async (repo, target) => {
-    response = await axios.get(`${API_BASE_URL}/translate`, {
+    const response = await axios.get(`${API_BASE_URL}/translate`, {
         params: {
             repo,
             target

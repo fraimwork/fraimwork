@@ -21,13 +21,15 @@ function App() {
     const [repoLink, setRepoLink] = useState('');
     const [targetFramework, setTargetFramework] = useState('react-native');
     const [sourceFramework, setSourceFramework] = useState('flutter');
+    const [isLoading, setIsLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(0);
 
     const handleNext = () => {
+        setIsLoading(true);
         switch (activeStep) {
             case 0:
                 // Contact the Gemini API to translate the repo link
-                translate(repoLink, targetFramework)
+                // translate(repoLink, targetFramework)
                 break;
             case 1:
                 // Contact the Gemini API to translate the repo link
@@ -39,6 +41,7 @@ function App() {
                 break;
         }
         setActiveStep(activeStep + 1);
+        setIsLoading(false);
     };
 
     const handleBack = () => {
@@ -96,10 +99,10 @@ function App() {
             </div>
             <Card 
                 style={{ 
-                backgroundColor: 'rgba(220, 255, 255, 0.7)', // Adjust transparency as needed
-                backdropFilter: 'blur(10px)', // Adjust blur intensity
-                borderRadius: '10px',
-                padding: '20px'
+                    backgroundColor: 'rgba(220, 255, 255, 0.7)', // Adjust transparency as needed
+                    backdropFilter: 'blur(10px)', // Adjust blur intensity
+                    borderRadius: '10px',
+                    padding: '20px'
                 }}
             >
                 <Steps current={activeStep}>
@@ -115,7 +118,7 @@ function App() {
                         <Button onClick={handleBack}>Back</Button>
                     )}
                     {activeStep < steps.length - 1 && (
-                        <Button type="primary" onClick={handleNext}>Next</Button>
+                        <Button type="primary" onClick={handleNext}  disabled={isLoading} loading={isLoading}>Next</Button>
                     )}
                     {activeStep === steps.length - 1 && (
                         <Button type="primary">Done</Button>
