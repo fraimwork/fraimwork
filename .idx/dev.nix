@@ -28,16 +28,11 @@
     previews = {
       enable = true;
       previews = {
-        # web = {
-        #   # Example: run "npm run dev" with PORT set to IDX's defined port for previews,
-        #   # and show it in IDX's web preview panel
-        #   command = ["npm" "run" "dev"];
-        #   manager = "web";
-        #   env = {
-        #     # Environment variables to set for your server
-        #     PORT = "$PORT";
-        #   };
-        # };
+        web = {
+          command = [ "cd backend/app && source .venv/bin/activate && python app.py" ];
+          env = { PORT = "$PORT"; };
+          manager = "web";
+        };
       };
     };
 

@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from utils.returny import create_pull_request
+from utils.gitutils import create_pull_request
 import json, os, requests
 from dotenv import load_dotenv
 from git import Repo
