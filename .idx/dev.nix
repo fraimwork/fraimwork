@@ -25,16 +25,15 @@
     ];
 
     # Enable previews
-    previews = {
-      enable = true;
-      previews = {
-        web = {
-          command = [ "cd backend/app && source .venv/bin/activate && python app.py" ];
-          env = { PORT = "$PORT"; };
-          manager = "web";
-        };
-      };
-    };
+    # previews = {
+    #   enable = true;
+    #   previews = {
+    #     web = {
+    #       command = [ "cd backend/app && source .venv/bin/activate && python app.py" ];
+    #       manager = "web";
+    #     };
+    #   };
+    # };
 
     # Workspace lifecycle hooks
     workspace = {
@@ -44,13 +43,12 @@
         pip-install = "cd backend/app && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt";
         # install Node.js dependencies
         npm-install = "cd frontend && npm install";
+        # open default files
+        default.openFiles = [ "backend/app/app.py" "frontend/src/App.jsx" ];
       };
       # Runs when the workspace is (re)started
       onStart = {
-        # install Python dependencies
-        pip-install = "cd backend/app && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt";
-        # install Node.js dependencies
-        npm-install = "cd frontend && npm install";
+        # Nothing to do here lol
       };
     };
   };

@@ -1,9 +1,13 @@
 from flask import Flask, render_template, request
+from flask_cors import CORS
 from utils.gitutils import create_pull_request
 import json, os, requests
 from dotenv import load_dotenv
 from git import Repo
 import google.generativeai as genai
+
+app = Flask(__name__)
+CORS(app)
 
 load_dotenv()  # Load environment variables from .env
 
@@ -28,8 +32,6 @@ ignored_files_of = {
     "react-native": []
     # Add more frameworks and their corresponding ignored files here
 }
-
-app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -98,6 +100,11 @@ def generate_tree_structure(path, indent=''):
 
 def framework_tree_structure(path, framework):
     return generate_tree_structure(f'{path}/{get_working_dir(framework)}')
+
+@app.route('/test', methods=['GET'])
+def test():
+    res = "Hello World!"
+    return res
 
 @app.route('/translate', methods=['GET'])
 def translate():

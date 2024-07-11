@@ -28,11 +28,13 @@ function App() {
         setIsLoading(true);
         switch (activeStep) {
             case 0:
-                // Contact the Gemini API to translate the repo link
-                // translate(repoLink, targetFramework)
+                // Retrieve the GitHub repo name
                 break;
             case 1:
                 // Contact the Gemini API to translate the repo link
+                translate(repoLink, targetFramework).then((data) => {
+                    console.log(data);
+                }); 
                 break;
             case 2:
                 // Contact the Gemini API to translate the repo link
