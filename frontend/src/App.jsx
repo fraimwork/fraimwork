@@ -102,7 +102,7 @@ function App() {
     return (
         <div style={{ width: '60%', margin: '50px auto' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}> {/* Centering container */}
-                <img src={LogoLight} alt="App Logo" style={{ width: '150px' }} /> {/* Add the logo */}
+                <img src={LogoDark} alt="App Logo" style={{ width: '150px', borderRadius: '30px' }} /> {/* Add the logo */}
             </div>
             <Card 
                 style={{ 

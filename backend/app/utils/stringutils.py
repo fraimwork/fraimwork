@@ -1,34 +1,28 @@
-import networkx as nx
-import os
-
 def arr_from_sep_string(string: str, sep=","):
     return [x.strip() for x in string.split(sep)]
 
-def generate_tree_structure(path, indent=''):
-    result = ''
-    items = os.listdir(path)
-    for index, item in enumerate(items):
-        item_path = os.path.join(path, item)
-        if os.path.isdir(item_path):
-            result += f"{indent}├── {item}/\n"
-            result += generate_tree_structure(item_path, indent + '│   ')
-        else:
-            result += f"{indent}├── {item}\n"
-    return result
+def extract_filename(path: str):
+    return path.split("/")[-1]
 
-def build_file_tree_dag(root_path):
-    # Initialize a directed graph
-    dag = nx.DiGraph()
+import re
+
+def extract_markdown_blocks(text):
+    """
+    Extract markdown blocks from a string.
+
+    Parameters:
+    text (str): The input string containing markdown blocks.
+
+    Returns:
+    list: A list of strings, each representing a markdown block.
+    """
+    # Regex to match markdown code blocks delimited by triple backticks
+    pattern = re.compile(r'```.*?```', re.DOTALL)
     
-    # Walk through the directory structure
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        for dirname in dirnames:
-            parent_dir = os.path.relpath(dirpath, root_path)
-            child_dir = os.path.relpath(os.path.join(dirpath, dirname), root_path)
-            dag.add_edge(parent_dir, child_dir)
-        for filename in filenames:
-            parent_dir = os.path.relpath(dirpath, root_path)
-            child_file = os.path.relpath(os.path.join(dirpath, filename), root_path)
-            dag.add_edge(parent_dir, child_file)
+    # Find all matches and return them
+    blocks = pattern.findall(text)
     
-    return dag
+    # Remove the triple backticks from each block
+    blocks = [block[3:-3].strip() for block in blocks]
+    
+    return blocks
