@@ -16,17 +16,19 @@ def generate_tree_structure(path, indent=''):
             result += f"{indent}├── {item}\n"
     return result
 
-def dag_from_filetree(filetree: str):
-    G = nx.DiGraph()
-    lines = filetree.split("\n")
-    for line in lines:
-        if not line:
-            continue
-        depth = len(line) - len(line.lstrip())
-        node = line.strip().replace("/", "")
-        if depth == 0:
-            G.add_node(node)
-        else:
-            parent = line[:depth].strip().replace("/", "")
-            G.add_edge(parent, node)
-    return G
+def build_file_tree_dag(root_path):
+    # Initialize a directed graph
+    dag = nx.DiGraph()
+    
+    # Walk through the directory structure
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        for dirname in dirnames:
+            parent_dir = os.path.relpath(dirpath, root_path)
+            child_dir = os.path.relpath(os.path.join(dirpath, dirname), root_path)
+            dag.add_edge(parent_dir, child_dir)
+        for filename in filenames:
+            parent_dir = os.path.relpath(dirpath, root_path)
+            child_file = os.path.relpath(os.path.join(dirpath, filename), root_path)
+            dag.add_edge(parent_dir, child_file)
+    
+    return dag

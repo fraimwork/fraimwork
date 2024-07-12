@@ -2,7 +2,7 @@ from flask import Flask, render_template, request
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo
 from utils.agent import Agent
-from utils.stringutils import arr_from_sep_string, dag_from_filetree, generate_tree_structure
+from utils.stringutils import arr_from_sep_string, build_file_tree_dag, generate_tree_structure
 import os, json, networkx as nx
 from dotenv import load_dotenv
 
@@ -18,10 +18,10 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
 translator = Agent(MODEL_NAME, api_key=API_KEY)
-translator.logged_prompt("You are a software engineer tasked with translating a framework. Respond with a single block of code and nothing else.")
+# translator.logged_prompt("You are a software engineer tasked with translating a framework. Respond with a single block of code and nothing else.")
 
 pm = Agent(MODEL_NAME, api_key=API_KEY)
-pm.logged_prompt("You are a project manager tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one. Respond with a file tree structure in a markdown cell and nothing else.")
+# pm.logged_prompt("You are a project manager tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one. Respond with a file tree structure in a markdown cell and nothing else.")
 
 extensions_of = {
     "flutter": [".dart"],
@@ -54,13 +54,13 @@ def get_working_dir(framework):
         case _:
             return None
 
-def wipe_repo(repo_path):
+def wipe_repo(repo_path, exceptions=set()):
     # remove all files except for .git folder
     for root, dirs, files in os.walk(repo_path):
         for file in files:
             os.remove(os.path.join(root, file))
         for dir in dirs:
-            if dir == ".git": continue
+            if dir == ".git" or dir in exceptions: continue
             os.rmdir(os.path.join(root, dir))
 
 def prepare_repo(repo_path, framework):
@@ -72,25 +72,14 @@ def prepare_repo(repo_path, framework):
     return "Repo prepared"
 
 def translate_code(source, target, code):
-    # Prepare the prompt for Gemini
     prompt = f"Translate the following {source} code to {target}: {code}"
-    # Send the request to the Gemini API (replace with actual API call)
     response = translator.prompt(prompt)
-    # Extract the translated code from the response
-    translated_code = extract_markdown(response)
-    return translated_code
+    return extract_markdown(response)
 
 def extract_markdown(text: str):
     # Split by  markdown ticks to get the code
     code = text.split("```")[1].split("```")[0]
     return code
-
-def framework_tree_structure(path, framework):
-    return generate_tree_structure(f'{path}/{get_working_dir(framework)}')
-
-@app.route('/test', methods=['GET'])
-def test():
-    return "Hello, World!"
 
 @app.route('/translate', methods=['POST'])
 def translate():
@@ -109,27 +98,26 @@ def translate():
     repo.git.checkout(base_branch)
     repo.git.checkout('-b', created_branch)
     local_repo_path = str(repo.working_dir)
+    working_dir_path = f'{local_repo_path}/{get_working_dir(source)}'
 
     # Get the file structure of the original repo and figure out which files to translate
-    file_tree_structure = dag_from_filetree(generate_tree_structure(f'{local_repo_path}/{get_working_dir(source)}', source))
+    file_tree_structure = build_file_tree_dag(working_dir_path)
     reverse_topology = list(nx.topological_sort(file_tree_structure))[::-1]
     files_to_translate = [node for node in reverse_topology if any(str(node).endswith(ext) for ext in extensions_of[source]) and node not in ignored_files_of[source]]
-
     for file_path in files_to_translate:
-        with open(file_path, 'r') as f:
+        with open(f'{working_dir_path}/{file_path}', 'r') as f:
             code = f.read()
         # Call Vertex Gemini API for translation (replace with actual API call)
         translated_code = translate_code(source, target, code)
         print(f"Translated code for {file_path}: {translated_code}")
-        with open(file_path, 'w') as f:
+        with open(f'{working_dir_path}/{file_path}', 'w') as f:
             f.write(translated_code)
-        return "Translation and PR process initiated", 200
 
     return create_pull_request(
         repo_link=repo_url,
         base_branch=base_branch,
         new_branch=created_branch,
-        title=f"Translation from {source.capitalize()} to {target.capitalize()}",
+        title=f"Translation from {source} to {target}",
         body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated."
     )
 
