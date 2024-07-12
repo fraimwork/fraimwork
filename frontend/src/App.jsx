@@ -24,7 +24,13 @@ function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(0);
 
-    const handleNext = () => {
+    const handleMidTransitionFailure = (error) => {
+        console.error(error);
+        setActiveStep(activeStep - 1);
+        setIsLoading(false);
+    }
+
+    const handleNext = async () => {
         setIsLoading(true);
         switch (activeStep) {
             case 0:
@@ -32,9 +38,8 @@ function App() {
                 break;
             case 1:
                 // Contact the Gemini API to translate the repo link
-                translate(repoLink, targetFramework).then((data) => {
-                    console.log(data);
-                }); 
+                const link = await translate(repoLink, targetFramework).catch(handleMidTransitionFailure);
+                setRepoLink(link);                
                 break;
             case 2:
                 // Contact the Gemini API to translate the repo link
