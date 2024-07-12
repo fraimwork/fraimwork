@@ -2,16 +2,22 @@
 import axios from 'axios';
 
 // Define the base URL for the Flask backend API
-const API_BASE_URL = "https://10.88.0.4:8080"; 
+const API_BASE_URL = "http://127.0.0.1:8080"; 
 
 const handleError = (error) => {
-  console.error('Error:', error);
-  throw error;
+    console.error('Error:', error);
+    throw error;
 };
 
 export const translate = async (repo, target) => {
-    console.log(`Calling API at ${API_BASE_URL}`)
-    const response = await axios.get(`${API_BASE_URL}/test`).catch({handleError});
-    console.log(`Response: ${response.data}`)
+    console.log(`Calling API at ${API_BASE_URL}`);
+    // Call the Flask backend API to translate the repo
+    const data = {
+        repo: repo,
+        target: target,
+        source: 'flutter',
+    };
+    const response = await axios.post(`${API_BASE_URL}/translate`, data).catch((error) => {handleError(error)});
+    console.log(`Response: ${response.data}`);
     return response.data;
 }

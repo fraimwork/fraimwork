@@ -4,3 +4,4 @@ requests
 google-generativeai
 python-dotenv
 gitpython
+networkx

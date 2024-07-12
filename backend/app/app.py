@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request
 from flask_cors import CORS
-from utils.gitutils import create_pull_request
-import json, os, requests
+from utils.gitutils import create_pull_request, clone_repo
+from utils.agent import Agent
+from utils.stringutils import arr_from_sep_string, dag_from_filetree, generate_tree_structure
+import os, json, networkx as nx
 from dotenv import load_dotenv
-from git import Repo
-import google.generativeai as genai
 
 app = Flask(__name__)
 CORS(app)
@@ -17,9 +17,11 @@ MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
-genai.configure(api_key=API_KEY)
-translator = genai.GenerativeModel(MODEL_NAME)
-pm = genai.GenerativeModel(MODEL_NAME)
+translator = Agent(MODEL_NAME, api_key=API_KEY)
+translator.logged_prompt("You are a software engineer tasked with translating a framework. Respond with a single block of code and nothing else.")
+
+pm = Agent(MODEL_NAME, api_key=API_KEY)
+pm.logged_prompt("You are a project manager tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one. Respond with a file tree structure in a markdown cell and nothing else.")
 
 extensions_of = {
     "flutter": [".dart"],
@@ -73,78 +75,63 @@ def translate_code(source, target, code):
     # Prepare the prompt for Gemini
     prompt = f"Translate the following {source} code to {target}: {code}"
     # Send the request to the Gemini API (replace with actual API call)
-    response = gemini_api_call(prompt)
+    response = translator.prompt(prompt)
     # Extract the translated code from the response
-    translated_code = extract_translated_code(response)
+    translated_code = extract_markdown(response)
     return translated_code
 
-def gemini_api_call(prompt):
-    return translator.generate_content(prompt).text
-
-def extract_translated_code(text):
+def extract_markdown(text: str):
     # Split by  markdown ticks to get the code
     code = text.split("```")[1].split("```")[0]
     return code
-
-def generate_tree_structure(path, indent=''):
-    result = ''
-    items = os.listdir(path)
-    for index, item in enumerate(items):
-        item_path = os.path.join(path, item)
-        if os.path.isdir(item_path):
-            result += f"{indent}├── {item}/\n"
-            result += generate_tree_structure(item_path, indent + '│   ')
-        else:
-            result += f"{indent}├── {item}\n"
-    return result
 
 def framework_tree_structure(path, framework):
     return generate_tree_structure(f'{path}/{get_working_dir(framework)}')
 
 @app.route('/test', methods=['GET'])
 def test():
-    res = "Hello World!"
-    return res
+    return "Hello, World!"
 
-@app.route('/translate', methods=['GET'])
+@app.route('/translate', methods=['POST'])
 def translate():
-    repo_url = request.args.get('repo')
-    source = request.args.get('source')
-    target = request.args.get('target')
-    base_branch = request.args.get('base_branch')
-    created_branch = request.args.get('created_branch')
+    data = json.loads(request.data)
+    repo_url = data['repo']
+    source = data['source']
+    target = data['target']
 
     if not repo_url:
         return "Error: Missing 'repo' parameter", 400
-    # 1. Clone the repository
-    repo_name = repo_url.split('/')[-1].replace('.git', '')
-    local_repo_path = f'./tmp/{repo_name}'
-    Repo.clone_from(repo_url, local_repo_path)
-    # 2. Identify relevant files for translation (based on framework detection)
 
-    # ... (Logic to determine which files to translate)
-    # 3. Translate files using Vertex Gemini
+    # Clone the repo and make a new branch
+    repo = clone_repo(repo_url)
+    base_branch = "master"
+    created_branch = f"translation-{source}-{target}"
+    repo.git.checkout(base_branch)
+    repo.git.checkout('-b', created_branch)
+    local_repo_path = str(repo.working_dir)
+
+    # Get the file structure of the original repo and figure out which files to translate
+    file_tree_structure = dag_from_filetree(generate_tree_structure(f'{local_repo_path}/{get_working_dir(source)}', source))
+    reverse_topology = list(nx.topological_sort(file_tree_structure))[::-1]
+    files_to_translate = [node for node in reverse_topology if any(str(node).endswith(ext) for ext in extensions_of[source]) and node not in ignored_files_of[source]]
+
     for file_path in files_to_translate:
         with open(file_path, 'r') as f:
             code = f.read()
         # Call Vertex Gemini API for translation (replace with actual API call)
-        translated_code = translate_code(source, target, code) 
+        translated_code = translate_code(source, target, code)
+        print(f"Translated code for {file_path}: {translated_code}")
         with open(file_path, 'w') as f:
             f.write(translated_code)
-        # 4. Create a new repository and push translated code
-        # ... (Logic to create a new repo and push changes)
-        # 5. Create a pull request
-        # ... (Logic to create a PR against the original repo)
         return "Translation and PR process initiated", 200
 
-    create_pull_request(
+    return create_pull_request(
         repo_link=repo_url,
         base_branch=base_branch,
         new_branch=created_branch,
         title=f"Translation from {source.capitalize()} to {target.capitalize()}",
         body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated."
     )
-    return render_template('result.html', result="Success")
 
 
 if __name__ == '__main__':

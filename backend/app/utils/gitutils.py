@@ -1,8 +1,29 @@
-import os
-import requests
-import json
+import os, json, requests, git
+import networkx as nx
+
+def clone_repo(repo_url: str):
+    repo_name = repo_url.split('/')[-1].replace('.git', '')
+    local_repo_path = f'./tmp/{repo_name}'
+    return git.Repo.clone_from(repo_url, local_repo_path)
+
+def create_branch(repo, branch_name):
+    repo.git.checkout('main')
+    repo.git.checkout('-b', branch_name)
+
+def make_directories_from_tree(repo, tree: nx.DiGraph):
+    for node in tree.nodes:
+        if not os.path.exists(node):
+            os.makedirs(node)
+    for edge in tree.edges:
+        parent, child = edge
+        with open(parent, 'w') as f:
+            f.write(f'// {parent} contents')
+        repo.git.add(parent)
+        repo.index.commit(f'Add {parent}')
+    return repo
 
 def create_pull_request(repo_link, base_branch, new_branch, title, body):
+    return 'https://google.com'
     # Obtain our GitHub personal access token
     GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
