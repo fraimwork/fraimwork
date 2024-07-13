@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo
-from utils.agent import Agent, GenerationConfig
+from utils.agent import Agent, GenerationConfig, Interaction
 from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
 from utils.filetreeutils import FileTree, write_file_tree
 import os, json, networkx as nx
@@ -20,28 +20,6 @@ LOCATION = os.getenv('LOCATION')
 MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
-
-translator = Agent(
-    model_name=MODEL_NAME,
-    api_key=API_KEY, name="translator",
-    generation_config=GenerationConfig(temperature=0.2),
-    system_prompt="You are a software engineer tasked with translating code from one language to another. Respond with code and nothing else."
-)
-
-architect = Agent(
-    model_name=MODEL_NAME,
-    api_key=API_KEY,
-    name="architect",
-    system_prompt="You are a software engineer tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one."
-)
-
-summarizer = Agent(
-    model_name=MODEL_NAME, api_key=API_KEY,
-    name="summarizer",
-    system_prompt="You are a high-level software engineer tasked with summarizing various code files. For each file, merely provide a summary of the file's contents as you see them. Keep your summaries brief and to the point."
-)
-
-hive = Team([translator, architect, summarizer])
 
 extensions_of = {
     "flutter": [".dart"],
@@ -94,11 +72,6 @@ def prepare_repo(repo_path, framework):
     os.makedirs(f"{repo_path}/{working_dir}", exist_ok=True)
     return f'{repo_path}/{working_dir}'
 
-def translate_code(source, target, code):
-    prompt = f"Respond with code and nothing else. Translate the following {source} code to {target}: {code}"
-    response = translator.chat(prompt, context_key=None)
-    return extract_markdown_blocks(response)[0]
-
 @app.route('/translate', methods=['POST'])
 def translate():
     data = json.loads(request.data)
@@ -122,42 +95,69 @@ def translate():
         local_repo_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack'
         working_dir_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack\\lib'
 
+    # Initialize the agent and team
+    swe = Agent(
+        model_name=MODEL_NAME,
+        api_key=API_KEY,
+        name="swe",
+        generation_config=GenerationConfig(temperature=0.2),
+        system_prompt="You are a software engineer tasked with translating code from one framework to another. Respond with code and nothing else."
+    )
+
+    pm = Agent(
+        model_name=MODEL_NAME,
+        api_key=API_KEY,
+        name="pm",
+        generation_config=GenerationConfig(max_output_tokens=4000),
+        system_prompt="You are a high-level technical project manager tasked with the project of translating a framework. In the following prompts, you will be given instructions on what to do. Answer them to the best of your knowledge."
+    )
+
     # Get the file structure of the original repo and the proposed file structure of the new repo
-    file_tree = FileTree.from_directory(working_dir_path)
-    # for node in tqdm(file_tree.reverse_level_order()):
-    #     if 'content' in file_tree.nodes[node]:
-    #         summary = summarizer.chat(remove_indents(file_tree.nodes[node]['content']), context_key=None)
-    #         file_tree.nodes[node]['summary'] = summary
-    prompt = f"This is the file tree for the original {source} repo:\n{get_working_dir(source)}\\\n{file_tree}. Create a file tree for the new {target} repo. Structure your response as follows:\n```\n{get_working_dir(target)}\\\nfile tree\n```"
-    response = extract_markdown_blocks(architect.chat(prompt, context_key=None))[0][len(get_working_dir(target)) + 2:]
+    source_file_tree = FileTree.from_directory(working_dir_path)
+    reverse_level_order = source_file_tree.reverse_level_order()
+    for node in tqdm(reverse_level_order):
+        if 'content' not in source_file_tree.nodes[node]: continue
+        summary = pm.chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
+        source_file_tree.nodes[node]['summary'] = summary
+    prompt = f"This is the file tree for the original {source} repo:\n{get_working_dir(source)}\\\n{source_file_tree}. Create a file tree for the new {target} repo in the new working directory {get_working_dir(target)}. Structure your response as follows:\n```\n{get_working_dir(target)}\\\nfile tree\n```"
+    custom_context = [
+            Interaction(
+                prompt=f'Summary of {file}',
+                response=source_file_tree.nodes[file]["summary"],
+                ) for file in reverse_level_order if 'content' in source_file_tree.nodes[file]
+            ]
+    raw_tree = extract_markdown_blocks(pm.chat(prompt, custom_context=custom_context))[0][len(get_working_dir(target)) + 2:]
     wipe_repo(local_repo_path)
+    working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
+    write_file_tree(raw_tree, working_dir_path)
+    target_file_tree = FileTree.from_directory(working_dir_path)
+    print(target_file_tree)
 
-    write_file_tree(response, f'{local_repo_path}\\{get_working_dir(target)}')
-    proposed_file_tree = FileTree.from_directory(f'{local_repo_path}\\{get_working_dir(target)}')
-    print(proposed_file_tree)
-    return "wow"
+    # Create a correspondence graph between the two file trees
     correspondance_graph = nx.DiGraph()
-    correspondance_graph.add_nodes_from(file_tree.nodes)
+    correspondance_graph.add_nodes_from(source_file_tree.nodes)
+    ... # TODO
+    return "wow"
 
-    node = 2
-    # find neighbors of node
-    # neighbors = correspondance_graph[]
+    # Translate the code in the proposed file tree
+    files_to_make = target_file_tree.reverse_level_order()
+    for node in files_to_make:
+        if 'content' in target_file_tree.nodes[node]: continue
+        relevant_files = correspondance_graph[node]
+        custom_context = [
+            Interaction(
+                prompt=f'{file}:\n{remove_indents(source_file_tree.nodes[file]["content"])}',
+                response='Waiting for instructions to translate...',
+            ) for file in relevant_files
+        ]
+        target_file_tree.nodes[node]['content'] = swe.chat(
+            f"Translate the prior code from {source} to {target} to create {node}:",
+            custom_context=custom_context
+        )
+        with open(f'{working_dir_path}\\{node}', 'w') as f:
+            f.write(target_file_tree.nodes[node]['content'])
 
-    reverse_topology = list(nx.topological_sort(file_tree))[::-1]
-    files_to_translate = [node for node in reverse_topology if any(str(node).endswith(ext) for ext in extensions_of[source]) and node not in ignored_files_of[source]]
-    print(f"Files to translate: {files_to_translate}")
-    # working_dir_path = prepare_repo(local_repo_path, target)
-    # for file in files_to_translate:
-    #     node = file_tree.nodes[file]
-    #     file_path = node['path']
-    #     file_name = node['name']
-    #     code = node['content']
-    #     # Call Vertex Gemini API for translation (replace with actual API call)
-    #     translated_code = translate_code(source, target, remove_indents(code))
-    #     print(f"Translated code for {file_path}: {translated_code}")
-    #     with open(f'{working_dir_path}/{file_path}', 'w') as f:
-    #         f.write(translated_code)
-
+    # Create a pull request with the translated code
     return create_pull_request(
         repo_link=repo_url,
         base_branch=base_branch,
