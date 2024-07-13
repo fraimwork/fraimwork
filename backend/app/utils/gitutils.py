@@ -1,18 +1,20 @@
 import os, json, requests, git
-import networkx as nx
+from utils.filetreeutils import FileTree
 
 def clone_repo(repo_url: str):
-    repo_name = repo_url.split('/')[-1].replace('.git', '')
-    local_repo_path = f'./tmp/{repo_name}'
+    pieces = repo_url.replace('.git', '').split('/')
+    repo_name = pieces[-1]
+    user_name = pieces[-2]
+    local_repo_path = f'./tmp/{user_name}/{repo_name}'
     return git.Repo.clone_from(repo_url, local_repo_path)
 
 def create_branch(repo, branch_name):
     repo.git.checkout('main')
     repo.git.checkout('-b', branch_name)
 
-def make_directories_from_tree(repo, tree: nx.DiGraph):
+def make_directories_from_tree(repo, tree: FileTree):
     for node in tree.nodes:
-        if not os.path.exists(node):
+        if not os.path.exists(node['path']):
             os.makedirs(node)
     for edge in tree.edges:
         parent, child = edge

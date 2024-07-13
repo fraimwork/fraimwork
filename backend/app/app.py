@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo
-from utils.agent import Agent
-from utils.stringutils import arr_from_sep_string, extract_filename, extract_markdown_blocks
-from utils.graphutils import build_file_tree_dag, string_represented_file_tree
+from utils.agent import Agent, GenerationConfig
+from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
+from utils.filetreeutils import FileTree, write_file_tree
 import os, json, networkx as nx
 from dotenv import load_dotenv
-from utils.hive import Hive
+from utils.team import Team
+from tqdm import tqdm
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -19,16 +21,27 @@ MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
-translator = Agent(MODEL_NAME, api_key=API_KEY)
-# translator.logged_prompt("You are a software engineer tasked with translating a framework.", asker="System")
+translator = Agent(
+    model_name=MODEL_NAME,
+    api_key=API_KEY, name="translator",
+    generation_config=GenerationConfig(temperature=0.2),
+    system_prompt="You are a software engineer tasked with translating code from one language to another. Respond with code and nothing else."
+)
 
-architect = Agent(MODEL_NAME, api_key=API_KEY)
-# architect.logged_prompt("You are a software engineer tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one.", asker="System")
+architect = Agent(
+    model_name=MODEL_NAME,
+    api_key=API_KEY,
+    name="architect",
+    system_prompt="You are a software engineer tasked with translating a framework. Your job is to describe the file tree structure that the new framework should use given the old one."
+)
 
-summarizer = Agent(MODEL_NAME, api_key=API_KEY)
-# summarizer.logged_prompt("You are a high-level software engineer tasked with summarizing various code files.", asker="System")
+summarizer = Agent(
+    model_name=MODEL_NAME, api_key=API_KEY,
+    name="summarizer",
+    system_prompt="You are a high-level software engineer tasked with summarizing various code files. For each file, merely provide a summary of the file's contents as you see them. Keep your summaries brief and to the point."
+)
 
-hive = Hive([translator, architect, summarizer])
+hive = Team([translator, architect, summarizer])
 
 extensions_of = {
     "flutter": [".dart"],
@@ -46,11 +59,12 @@ ignored_files_of = {
 def index():
     if request.method == 'GET':
         return render_template('index.html')
-    code = request.form['code']
-    source = "flutter"  # Replace with actual framework detection logic
-    target = "react-native"  # Replace with actual framework detection logic
-    translated_code = translate_code(source, target, code)
-    return render_template('result.html', result=translated_code, prompt=code)
+    repo = request.form['repo']
+    source = "flutter"  # Sample default value
+    target = "react-native"  # Sample default value
+    # Reroute to /translate with the repo URL and source and target frameworks
+    response = requests.post('http://localhost:8080/translate', json={'repo': repo, 'source': source, 'target': target})
+    return render_template('result.html', response=response.text, prompt=f"Translate {source} to {target} in the following repo: {repo}")
 
 def get_working_dir(framework):
     match framework:
@@ -62,18 +76,15 @@ def get_working_dir(framework):
             return None
 
 def wipe_repo(repo_path, exceptions=set()):
-    # remove all files except for .git folder
     for dir in os.listdir(repo_path):
-        # if dir is a file
         if os.path.isfile(os.path.join(repo_path, dir)):
             os.remove(os.path.join(repo_path, dir))
         else:
-            dir_name = extract_filename(dir)
+            dir_name = os.path.basename(dir)
             if dir_name == ".git" or dir_name in exceptions: continue
-            # if dir is not empty, recursively wipe it
             if os.listdir(os.path.join(repo_path, dir)):
                 wipe_repo(os.path.join(repo_path, dir))
-            # os.rmdir(os.path.join(repo_path, dir))
+            os.rmdir(os.path.join(repo_path, dir))
 
 def prepare_repo(repo_path, framework):
     working_dir = get_working_dir(framework)
@@ -85,13 +96,8 @@ def prepare_repo(repo_path, framework):
 
 def translate_code(source, target, code):
     prompt = f"Respond with code and nothing else. Translate the following {source} code to {target}: {code}"
-    response = translator.prompt(prompt)
+    response = translator.chat(prompt, context_key=None)
     return extract_markdown_blocks(response)[0]
-
-def log_agents():
-    translator.log_conversation('./logs/translator.log')
-    architect.log_conversation('./logs/architect.log')
-    summarizer.log_conversation('./logs/summarizer.log')
 
 @app.route('/translate', methods=['POST'])
 def translate():
@@ -104,44 +110,53 @@ def translate():
         return "Error: Missing 'repo' parameter", 400
 
     # Clone the repo and make a new branch
-    # if repo already exists, delete it
-    path = f'./tmp/{repo_url.split("/")[-1].replace(".git", "")}'
-    print(path)
-    if os.path.exists(path):
-        wipe_repo(path)
-    repo = clone_repo(repo_url)
-    base_branch = "master"
-    created_branch = f"translation-{source}-{target}"
-    repo.git.checkout(base_branch)
-    repo.git.checkout('-b', created_branch)
-    local_repo_path = str(repo.working_dir)
-    working_dir_path = f'{local_repo_path}/{get_working_dir(source)}'
+    if not os.path.exists('.\\tmp\\6165-MSET-CuttleFish\\TeamTrack'):
+        repo = clone_repo(repo_url)
+        base_branch = "master"
+        created_branch = f"translation-{source}-{target}"
+        repo.git.checkout(base_branch)
+        repo.git.checkout('-b', created_branch)
+        local_repo_path = str(repo.working_dir)
+        working_dir_path = f'{local_repo_path}\\{get_working_dir(source)}'
+    else:
+        local_repo_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack'
+        working_dir_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack\\lib'
 
-    # Get the file structure of the original repo and figure out which files to translate
-    file_tree_structure = build_file_tree_dag(working_dir_path)
-    # correspondance_graph = nx.DiGraph()
-    # for node in file_tree_structure.nodes:
-    #     response = architect.logged_prompt(f"Which file(s) from the old structure correspond to {node.path} in the new structure")
-    #     arr_from_sep_string()
-    #     correspondance_graph.add_edge(node)
+    # Get the file structure of the original repo and the proposed file structure of the new repo
+    file_tree = FileTree.from_directory(working_dir_path)
+    # for node in tqdm(file_tree.reverse_level_order()):
+    #     if 'content' in file_tree.nodes[node]:
+    #         summary = summarizer.chat(remove_indents(file_tree.nodes[node]['content']), context_key=None)
+    #         file_tree.nodes[node]['summary'] = summary
+    prompt = f"This is the file tree for the original {source} repo:\n{get_working_dir(source)}\\\n{file_tree}. Create a file tree for the new {target} repo. Structure your response as follows:\n```\n{get_working_dir(target)}\\\nfile tree\n```"
+    response = extract_markdown_blocks(architect.chat(prompt, context_key=None))[0][len(get_working_dir(target)) + 2:]
+    wipe_repo(local_repo_path)
 
-    reverse_topology = list(nx.topological_sort(file_tree_structure))[::-1]
+    write_file_tree(response, f'{local_repo_path}\\{get_working_dir(target)}')
+    proposed_file_tree = FileTree.from_directory(f'{local_repo_path}\\{get_working_dir(target)}')
+    print(proposed_file_tree)
+    return "wow"
+    correspondance_graph = nx.DiGraph()
+    correspondance_graph.add_nodes_from(file_tree.nodes)
+
+    node = 2
+    # find neighbors of node
+    # neighbors = correspondance_graph[]
+
+    reverse_topology = list(nx.topological_sort(file_tree))[::-1]
     files_to_translate = [node for node in reverse_topology if any(str(node).endswith(ext) for ext in extensions_of[source]) and node not in ignored_files_of[source]]
     print(f"Files to translate: {files_to_translate}")
     # working_dir_path = prepare_repo(local_repo_path, target)
-    for file in files_to_translate:
-        node = file_tree_structure.nodes[file]
-        file_path = node['path']
-        file_name = node['name']
-        code = node['content']
-        # Call Vertex Gemini API for translation (replace with actual API call)
-        translated_code = translate_code(source, target, code)
-        print(f"Translated code for {file_path}: {translated_code}")
-        with open(f'{working_dir_path}/{file_path}', 'w') as f:
-            f.write(translated_code)
-    
-    # Log the conversations with the agents
-    log_agents()
+    # for file in files_to_translate:
+    #     node = file_tree.nodes[file]
+    #     file_path = node['path']
+    #     file_name = node['name']
+    #     code = node['content']
+    #     # Call Vertex Gemini API for translation (replace with actual API call)
+    #     translated_code = translate_code(source, target, remove_indents(code))
+    #     print(f"Translated code for {file_path}: {translated_code}")
+    #     with open(f'{working_dir_path}/{file_path}', 'w') as f:
+    #         f.write(translated_code)
 
     return create_pull_request(
         repo_link=repo_url,

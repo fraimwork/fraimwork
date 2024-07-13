@@ -6,10 +6,45 @@
     <title>Fraimwork</title>
 </head>
 <body>
-    <form action="/" method="post">
-        <label for="text">Enter code to translate:</label><br>
-        <textarea id="text" name="code" rows="4" cols="50"></textarea><br>
-        <input type="submit" value="Translate">
+    <form id="translation-form">
+        <label for="text">Enter repo link to translate:</label><br>
+        <textarea id="text" name="repo" rows="4" cols="50"></textarea><br>
+
+        <label for="source">Select source framework:</label><br>
+        <select id="source" name="source">
+            <option value="flutter">Flutter</option>
+            <option value="react-native">React Native</option>
+            <!-- Add more options as needed -->
+        </select><br>
+
+        <label for="target">Select target framework:</label><br>
+        <select id="target" name="target">
+            <option value="flutter">Flutter</option>
+            <option value="react-native">React Native</option>
+            <!-- Add more options as needed -->
+        </select><br>
+
+        <button type="submit">Translate</button>
     </form>
+    <p id="result"></p>
+    <script>
+        document.getElementById('translation-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const repo = document.getElementById('text').value;
+            const target = document.getElementById('target').value;
+            const source = document.getElementById('source').value;
+
+            const response = await fetch('/translate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ repo: repo, target: target, source: source })
+            });
+
+            const result = await response.json();
+            document.getElementById('result').textContent = result.translated_text || result.error;
+        });
+    </script>
 </body>
 </html>
