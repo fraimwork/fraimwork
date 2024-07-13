@@ -3,6 +3,10 @@ import re
 def arr_from_sep_string(string: str, sep=","):
     return [x.strip() for x in string.split(sep)]
 
+def arr_from_numbered_list(string: str):
+    withNumbers = arr_from_sep_string(string, "\n")
+    return [x.split(' ')[1] for x in withNumbers]
+
 def extract_markdown_blocks(text):
     """
     Extract markdown blocks from a string.

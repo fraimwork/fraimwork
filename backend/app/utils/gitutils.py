@@ -6,10 +6,12 @@ def clone_repo(repo_url: str):
     repo_name = pieces[-1]
     user_name = pieces[-2]
     local_repo_path = f'./tmp/{user_name}/{repo_name}'
+    if os.path.exists(local_repo_path):
+        return git.Repo(local_repo_path)
     return git.Repo.clone_from(repo_url, local_repo_path)
 
-def create_branch(repo, branch_name):
-    repo.git.checkout('main')
+def create_branch(repo, base_name, branch_name):
+    repo.git.checkout(base_name)
     repo.git.checkout('-b', branch_name)
 
 def make_directories_from_tree(repo, tree: FileTree):
@@ -24,58 +26,53 @@ def make_directories_from_tree(repo, tree: FileTree):
         repo.index.commit(f'Add {parent}')
     return repo
 
-def create_pull_request(repo_link, base_branch, new_branch, title, body):
-    return 'https://google.com'
-    # Obtain our GitHub personal access token
-    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+def create_pull_request(repo, base_branch, new_branch, title, body, token):
+    """
+    Creates a pull request on GitHub.
 
-    # Construct the PR
-    BASE_BRANCH = base_branch
-    NEW_BRANCH = new_branch
-    PR_TITLE = title
-    PR_BODY = body
+    :param repo: git.Repo object
+    :param base_branch: The branch you want to merge into (usually 'main' or 'master')
+    :param new_branch: The branch you want to merge from
+    :param title: The title of the pull request
+    :param body: The body description of the pull request
+    :param token: GitHub personal access token
+    :return: Response from the GitHub API
+    """
+    # Extract the repository owner and name from the remote URL
+    remote_url = repo.remotes.origin.url
+    if remote_url.startswith('git@'):
+        remote_url = remote_url.replace(':', '/').replace('git@', 'https://')
+    elif remote_url.startswith('https://'):
+        remote_url = remote_url.replace('.git', '')
+    
+    parts = remote_url.split('/')
+    owner = parts[-2]
+    repo_name = parts[-1]
 
-    # Set the headers for authorization
+    # GitHub API URL for creating a pull request
+    api_url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls"
+
+    # Headers for authentication
     headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
     }
 
-    # Step 1: Get the SHA of the base branch (main)
-    response = requests.get(
-        f'{repo_link}/branches/{BASE_BRANCH}',
-        headers=headers
-    )
-    response.raise_for_status()
-    base_sha = response.json()['commit']['sha']
-
-    # Step 2: Create a new branch
+    # Payload for the pull request
     data = {
-        'ref': f'refs/heads/{NEW_BRANCH}',
-        'sha': base_sha
+        "title": title,
+        "body": body,
+        "head": new_branch,
+        "base": base_branch
     }
-    response = requests.post(
-        f'https://api.github.com/repos/{GITHUB_USER}/{REPO_NAME}/git/refs',
-        headers=headers,
-        data=json.dumps(data)
-    )
-    response.raise_for_status()
 
-    # Note: You would typically make some changes to the new branch here before committing and pushing
+    # Make the request to create the pull request
+    response = requests.post(api_url, headers=headers, data=json.dumps(data))
 
-    # Step 3: Create a pull request
-    data = {
-        'title': PR_TITLE,
-        'body': PR_BODY,
-        'head': NEW_BRANCH,
-        'base': BASE_BRANCH
-    }
-    response = requests.post(
-        f'https://api.github.com/repos/{GITHUB_USER}/{REPO_NAME}/pulls',
-        headers=headers,
-        data=json.dumps(data)
-    )
-    response.raise_for_status()
-    pr_url = response.json()['html_url']
+    if response.status_code == 201:
+        print("Pull request created successfully!")
+    else:
+        print(f"Failed to create pull request: {response.status_code}")
+        print(response.json())
 
-    print(f'Pull request created: {pr_url}')
+    return response.json()

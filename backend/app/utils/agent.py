@@ -1,6 +1,7 @@
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from collections import defaultdict
+import asyncio
 import time
 
 class GenerationConfig:
@@ -57,7 +58,6 @@ class Interaction:
 class Agent:
     def __init__(self, model_name, api_key, name="Agent", generation_config=GenerationConfig(), system_prompt=None, safety_settings=SafetySettings()):
         genai.configure(api_key=api_key)
-        
         self.model = genai.GenerativeModel(model_name, system_instruction=system_prompt, generation_config=generation_config.to_dict(), safety_settings=safety_settings.to_dict())
         self.keyed_interactions = defaultdict(list[Interaction])
         self.name = name
@@ -69,8 +69,8 @@ class Agent:
             f.write(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}\n\nLog time: {time_string}\n\n")
 
     def _build_context(self, key="all", context=None):
-        if not key: return []
-        elif context: return [message for interaction in context for message in interaction.to_dict()]
+        if context: return [message for interaction in context for message in interaction.to_dict()]
+        elif not key: return []
         return [message for interaction in self.keyed_interactions[key] for message in interaction.to_dict()]
     
     def add_to_context(self, prompt, response, asker, key="all"):
@@ -85,3 +85,14 @@ class Agent:
         response = session.send_message(prompt).text
         self.add_to_context(prompt, response, asker, save_context)
         return response
+    
+    async def async_chat(self, prompt, context_key=None, asker="user", save_context="all", custom_context=None):
+        history = self._build_context(context_key, custom_context)
+        session = self.model.start_chat(history=history)
+        for _ in range(5):
+            try:
+                response = await session.send_message_async(prompt)
+                return response.text
+            except Exception as e:
+                print(e)
+                await asyncio.sleep(2)

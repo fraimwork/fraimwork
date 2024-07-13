@@ -1,13 +1,14 @@
+import requests
+import asyncio
 from flask import Flask, render_template, request, redirect, url_for
 from flask_cors import CORS
-from utils.gitutils import create_pull_request, clone_repo
+from utils.gitutils import create_pull_request, clone_repo, create_branch
 from utils.agent import Agent, GenerationConfig, Interaction
 from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
 from utils.filetreeutils import FileTree, write_file_tree
 import os, json, networkx as nx
 from dotenv import load_dotenv
 from utils.team import Team
-from tqdm import tqdm
 import requests
 
 app = Flask(__name__)
@@ -73,7 +74,7 @@ def prepare_repo(repo_path, framework):
     return f'{repo_path}/{working_dir}'
 
 @app.route('/translate', methods=['POST'])
-def translate():
+async def translate():
     data = json.loads(request.data)
     repo_url = data['repo']
     source = data['source']
@@ -83,24 +84,19 @@ def translate():
         return "Error: Missing 'repo' parameter", 400
 
     # Clone the repo and make a new branch
-    if not os.path.exists('.\\tmp\\6165-MSET-CuttleFish\\TeamTrack'):
-        repo = clone_repo(repo_url)
-        base_branch = "master"
-        created_branch = f"translation-{source}-{target}"
-        repo.git.checkout(base_branch)
-        repo.git.checkout('-b', created_branch)
-        local_repo_path = str(repo.working_dir)
-        working_dir_path = f'{local_repo_path}\\{get_working_dir(source)}'
-    else:
-        local_repo_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack'
-        working_dir_path = '.\\tmp\\6165-MSET-CuttleFish\\TeamTrack\\lib'
+    repo = clone_repo(repo_url)
+    base_branch = repo.active_branch.name
+    created_branch = f"translation-{source}-{target}"
+    create_branch(repo, repo.active_branch.name, created_branch)
+    local_repo_path = str(repo.working_dir)
+    working_dir_path = f'{local_repo_path}\\{get_working_dir(source)}'
 
     # Initialize the agent and team
     swe = Agent(
         model_name=MODEL_NAME,
         api_key=API_KEY,
         name="swe",
-        generation_config=GenerationConfig(temperature=0.2),
+        generation_config=GenerationConfig(temperature=0.9),
         system_prompt="You are a software engineer tasked with translating code from one framework to another. Respond with code and nothing else."
     )
 
@@ -114,57 +110,97 @@ def translate():
 
     # Get the file structure of the original repo and the proposed file structure of the new repo
     source_file_tree = FileTree.from_directory(working_dir_path)
-    reverse_level_order = source_file_tree.reverse_level_order()
-    for node in tqdm(reverse_level_order):
-        if 'content' not in source_file_tree.nodes[node]: continue
-        summary = pm.chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
-        source_file_tree.nodes[node]['summary'] = summary
+    source_reverse_level_order = source_file_tree.reverse_level_order()
+    async def task(node):
+        if 'content' not in source_file_tree.nodes[node]: return None
+        return await pm.async_chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
+    tasks = [task(node) for node in source_reverse_level_order]
+    responses = await asyncio.gather(*tasks)
+    for i, response in enumerate(responses):
+        source_file_tree.nodes[source_reverse_level_order[i]]["summary"] = response
     prompt = f"This is the file tree for the original {source} repo:\n{get_working_dir(source)}\\\n{source_file_tree}. Create a file tree for the new {target} repo in the new working directory {get_working_dir(target)}. Structure your response as follows:\n```\n{get_working_dir(target)}\\\nfile tree\n```"
     custom_context = [
             Interaction(
                 prompt=f'Summary of {file}',
                 response=source_file_tree.nodes[file]["summary"],
-                ) for file in reverse_level_order if 'content' in source_file_tree.nodes[file]
+                ) for file in source_reverse_level_order if 'content' in source_file_tree.nodes[file]
             ]
+
     raw_tree = extract_markdown_blocks(pm.chat(prompt, custom_context=custom_context))[0][len(get_working_dir(target)) + 2:]
     wipe_repo(local_repo_path)
     working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
     write_file_tree(raw_tree, working_dir_path)
     target_file_tree = FileTree.from_directory(working_dir_path)
-    print(target_file_tree)
 
     # Create a correspondence graph between the two file trees
     correspondance_graph = nx.DiGraph()
-    correspondance_graph.add_nodes_from(source_file_tree.nodes)
-    ... # TODO
-    return "wow"
+    custom_context.append(
+            Interaction(
+                prompt=prompt,
+                response=raw_tree
+            )
+        )
+
+    async def find_correspondance(node):
+        if 'content' not in target_file_tree.nodes[node]: return None
+        raw_correspondances = await pm.async_chat(f"Which file(s) in the original {source} repo correspond to {node} in the translated {target} repo you made? Only include the paths in your response and format your response as:\n```\n{get_working_dir(source)}\\path\\to\\{source}\\file1, {get_working_dir(source)}\\path\\to\\{source}\\file2\n```", custom_context=custom_context)
+        return extract_markdown_blocks(raw_correspondances)[0]
+    tasks = [find_correspondance(node) for node in target_file_tree.nodes]
+    responses = await asyncio.gather(*tasks)
+    for i, response in enumerate(responses):
+        if not response: continue
+        node = list(target_file_tree.nodes)[i]
+        target_node = f'{target}_{node}'
+        for correspondance in arr_from_sep_string(response):
+            source_node = f'{source}_{correspondance[len(get_working_dir(source)) + 1:]}'
+            correspondance_graph.add_edge(target_node, source_node)
 
     # Translate the code in the proposed file tree
     files_to_make = target_file_tree.reverse_level_order()
-    for node in files_to_make:
-        if 'content' in target_file_tree.nodes[node]: continue
-        relevant_files = correspondance_graph[node]
+    async def make_file(node):
+        if 'content' not in target_file_tree.nodes[node]: return None
+        relevant_files = [file[len(target) + 2:] for file in correspondance_graph[f'{target}_{node}']]
+        actually_relevant_files = []
+        for source_file in source_file_tree.nodes:
+            for file in relevant_files:
+                if file in source_file:
+                    actually_relevant_files.append(source_file)
         custom_context = [
             Interaction(
                 prompt=f'{file}:\n{remove_indents(source_file_tree.nodes[file]["content"])}',
                 response='Waiting for instructions to translate...',
-            ) for file in relevant_files
+            ) for file in actually_relevant_files
         ]
-        target_file_tree.nodes[node]['content'] = swe.chat(
+        raw_resp = await swe.async_chat(
             f"Translate the prior code from {source} to {target} to create {node}:",
             custom_context=custom_context
         )
-        with open(f'{working_dir_path}\\{node}', 'w') as f:
-            f.write(target_file_tree.nodes[node]['content'])
+        blocks = extract_markdown_blocks(raw_resp)
+        if len(blocks) == 0: return "UNABLE TO TRANSLATE THIS FILE"
+        return blocks[0]
+    tasks = [make_file(node) for node in files_to_make]
+    responses = await asyncio.gather(*tasks)
+    for i, response in enumerate(responses):
+        if not response: continue
+        target_file_tree.nodes[files_to_make[i]]['content'] = response
+        with open(f'{working_dir_path}\\{files_to_make[i]}', 'w') as f:
+            f.write(response)
+
+    # Commit the translated code
+    repo.git.add(A=True)
+    repo.index.commit(f"Translate code from {source} to {target}")
+    # Push the branch to the remote repository
+    repo.git.push("origin", created_branch)
 
     # Create a pull request with the translated code
     return create_pull_request(
-        repo_link=repo_url,
-        base_branch=base_branch,
-        new_branch=created_branch,
-        title=f"Translation from {source} to {target}",
-        body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated."
-    )
+            repo=repo,
+            base_branch=base_branch,
+            new_branch=created_branch,
+            title=f"Translation from {source} to {target}",
+            body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated.",
+            token=GITHUB_TOKEN
+        )
 
 
 if __name__ == '__main__':
