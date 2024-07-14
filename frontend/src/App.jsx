@@ -10,7 +10,7 @@ const { Step } = Steps;
 const { Title } = Typography;
 const { Option } = Select;
 
-const steps = ['Enter Repo Link', 'Choose Target Framework', 'Visit Pull Request'];
+const steps = ['Enter Repo Link', 'Select Current Framework', 'Choose Target Framework', 'Visit Pull Request'];
 
 const frameworks = [
     { value: 'react-native', label: 'React Native' },
@@ -38,10 +38,10 @@ function App() {
                 break;
             case 1:
                 // Contact the Gemini API to translate the repo link
-                const link = await translate(repoLink, targetFramework).catch(handleMidTransitionFailure);
-                setRepoLink(link);                
                 break;
             case 2:
+                const link = await translate(repoLink, targetFramework).catch(handleMidTransitionFailure);
+                setRepoLink(link);  
                 // Contact the Gemini API to translate the repo link
                 break;
             default:
@@ -59,10 +59,6 @@ function App() {
         setRepoLink(e.target.value);
     };
 
-    const handleTargetFrameworkChange = (value) => {
-        setTargetFramework(value);
-    };
-
     const getContent = (step) => {
         switch (step) {
             case 0:
@@ -76,8 +72,8 @@ function App() {
             case 1:
                 return (
                     <>
-                        <Title level={4}>Choose the target framework:</Title>
-                        <Select value={targetFramework} onChange={handleTargetFrameworkChange}>
+                        <Title level={4}>Select your current framework:</Title>
+                        <Select value={sourceFramework} onChange={setSourceFramework}>
                             {frameworks.map((framework) => (
                                 <Option key={framework.value} value={framework.value}>
                                     {framework.label}
@@ -89,9 +85,31 @@ function App() {
             case 2:
                 return (
                     <>
+                        <Title level={4}>Choose your target framework:</Title>
+                        <Select value={targetFramework} onChange={setTargetFramework}>
+                            {frameworks.flatMap((framework) => framework.value === sourceFramework ? [] : (
+                                <Option key={framework.value} value={framework.value}>
+                                    {framework.label}
+                                </Option>
+                                )
+                            )}
+                        </Select>
+                    </>
+                );
+            case 3:
+                if (!repoLink) {
+                    return (
+                        <>
+                            <Title level={4}>Error translating repository</Title>
+                            <p>There was an error translating the repository. Please try again.</p>
+                        </>
+                    );
+                }
+                return (
+                    <>
                         <Title level={4}>Translation complete! Visit your pull request:</Title>
                         {/* Replace with actual PR link later */}
-                        <a href="#">View Pull Request</a> 
+                        <a href="www.google.com">View Pull Request</a> 
                     </>
                 );
             default:
@@ -125,7 +143,7 @@ function App() {
                         <Button onClick={handleBack}>Back</Button>
                     )}
                     {activeStep < steps.length - 1 && (
-                        <Button type="primary" onClick={handleNext}  disabled={isLoading} loading={isLoading}>Next</Button>
+                        <Button type="primary" onClick={handleNext}  disabled={isLoading || !repoLink} loading={isLoading}>Next</Button>
                     )}
                     {activeStep === steps.length - 1 && (
                         <Button type="primary">Done</Button>

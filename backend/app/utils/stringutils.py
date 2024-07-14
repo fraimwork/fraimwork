@@ -17,9 +17,9 @@ def extract_markdown_blocks(text):
     Returns:
     list: A list of strings, each representing a markdown block.
     """
-    pattern = re.compile(r'```.*?```', re.DOTALL)
+    pattern = re.compile(r"```(.*?)\n(.*?)```", re.DOTALL)
     blocks = pattern.findall(text)
-    blocks = [block[3:-3].strip() for block in blocks]
+    blocks = [block[1].strip() for block in blocks]
     return blocks
 
 def remove_indents(string: str):

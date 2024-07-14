@@ -1,10 +1,26 @@
 import os, json, requests, git
 from utils.filetreeutils import FileTree
 
-def clone_repo(repo_url: str):
+def get_repo_size(owner, repo):
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        repo_info = response.json()
+        size_kb = repo_info.get('size', 0)
+        size_mb = size_kb / 1024
+        return size_mb
+    else:
+        print(f"Failed to fetch repository info: {response.status_code}")
+        return None
+
+def clone_repo(repo_url: str, max_size_mb=100):
     pieces = repo_url.replace('.git', '').split('/')
     repo_name = pieces[-1]
     user_name = pieces[-2]
+    size_mb = get_repo_size(user_name, repo_name)
+    if size_mb is None or size_mb > max_size_mb:
+        print(f"Repository is too large: {size_mb} MB")
+        return None
     local_repo_path = f'./tmp/{user_name}/{repo_name}'
     if os.path.exists(local_repo_path):
         return git.Repo(local_repo_path)

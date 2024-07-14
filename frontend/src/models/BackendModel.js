@@ -9,7 +9,7 @@ const handleError = (error) => {
     throw error;
 };
 
-export const translate = async (repo, target) => {
+export const translate = async (repo, source, target) => {
     console.log(`Calling API at ${API_BASE_URL}`);
     // Call the Flask backend API to translate the repo
     const data = {
@@ -17,7 +17,7 @@ export const translate = async (repo, target) => {
         target: target,
         source: 'flutter',
     };
-    const response = await axios.post(`${API_BASE_URL}/translate`, data).catch((error) => {handleError(error)});
+    const response = await axios.post(`${API_BASE_URL}/translate`, data).catch(handleError);
     console.log(`Response: ${response.data}`);
     return response.data;
 }

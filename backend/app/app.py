@@ -1,15 +1,12 @@
-import requests
-import asyncio
-from flask import Flask, render_template, request, redirect, url_for
+import os, json, asyncio, networkx as nx
+from flask import Flask, request
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo, create_branch
 from utils.agent import Agent, GenerationConfig, Interaction
 from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
 from utils.filetreeutils import FileTree, write_file_tree
-import os, json, networkx as nx
 from dotenv import load_dotenv
 from utils.team import Team
-import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -33,17 +30,6 @@ ignored_files_of = {
     "react-native": []
     # Add more frameworks and their corresponding ignored files here
 }
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'GET':
-        return render_template('index.html')
-    repo = request.form['repo']
-    source = "flutter"  # Sample default value
-    target = "react-native"  # Sample default value
-    # Reroute to /translate with the repo URL and source and target frameworks
-    response = requests.post('http://localhost:8080/translate', json={'repo': repo, 'source': source, 'target': target})
-    return render_template('result.html', response=response.text, prompt=f"Translate {source} to {target} in the following repo: {repo}")
 
 def get_working_dir(framework):
     match framework:
@@ -73,15 +59,23 @@ def prepare_repo(repo_path, framework):
     os.makedirs(f"{repo_path}/{working_dir}", exist_ok=True)
     return f'{repo_path}/{working_dir}'
 
+def failed_check_for_params(data, *params):
+    for param in params:
+        if not data[param]:
+            return f"Error: Missing '{param}' parameter", 400
+    return None
+
 @app.route('/translate', methods=['POST'])
 async def translate():
+    # Load the request data
     data = json.loads(request.data)
     repo_url = data['repo']
     source = data['source']
     target = data['target']
-
-    if not repo_url:
-        return "Error: Missing 'repo' parameter", 400
+    if error := failed_check_for_params(data, 'repo', 'source', 'target'):
+        return error 
+    elif target == source:
+        return "Error: Source and target frameworks must be different", 400
 
     # Clone the repo and make a new branch
     repo = clone_repo(repo_url)
@@ -110,9 +104,8 @@ async def translate():
 
     # Get the file structure of the original repo and the proposed file structure of the new repo
     source_file_tree = FileTree.from_directory(working_dir_path)
-    source_reverse_level_order = source_file_tree.reverse_level_order()
+    source_reverse_level_order = [node for node in source_file_tree.reverse_level_order() if 'content' in source_file_tree.nodes[node]]
     async def task(node):
-        if 'content' not in source_file_tree.nodes[node]: return None
         return await pm.async_chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
     tasks = [task(node) for node in source_reverse_level_order]
     responses = await asyncio.gather(*tasks)
@@ -128,8 +121,10 @@ async def translate():
 
     raw_tree = extract_markdown_blocks(pm.chat(prompt, custom_context=custom_context))[0][len(get_working_dir(target)) + 2:]
     wipe_repo(local_repo_path)
+    repo.commit(A=True, m="Let the past die. Kill it if you have to.")
     working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
     write_file_tree(raw_tree, working_dir_path)
+    repo.commit(A=True, m="A New Hope")
     target_file_tree = FileTree.from_directory(working_dir_path)
 
     # Create a correspondence graph between the two file trees
@@ -140,25 +135,23 @@ async def translate():
                 response=raw_tree
             )
         )
-
     async def find_correspondance(node):
-        if 'content' not in target_file_tree.nodes[node]: return None
-        raw_correspondances = await pm.async_chat(f"Which file(s) in the original {source} repo correspond to {node} in the translated {target} repo you made? Only include the paths in your response and format your response as:\n```\n{get_working_dir(source)}\\path\\to\\{source}\\file1, {get_working_dir(source)}\\path\\to\\{source}\\file2\n```", custom_context=custom_context)
-        return extract_markdown_blocks(raw_correspondances)[0]
-    tasks = [find_correspondance(node) for node in target_file_tree.nodes]
+        return await pm.async_chat(f"Which file(s) in the original {source} repo correspond to {node} in the translated {target} repo you made? Only include the paths in your response and format your response as:\n```\n{get_working_dir(source)}\\path\\to\\{source}\\file1, {get_working_dir(source)}\\path\\to\\{source}\\file2\n```. Be sure to start all of your paths from {get_working_dir(source)}", custom_context=custom_context)
+    files_to_make = [file for file in target_file_tree.reverse_level_order() if 'content' in target_file_tree.nodes[file]]
+    tasks = [find_correspondance(node) for node in files_to_make]
     responses = await asyncio.gather(*tasks)
     for i, response in enumerate(responses):
-        if not response: continue
-        node = list(target_file_tree.nodes)[i]
+        blocks = extract_markdown_blocks(response)
+        if len(blocks) == 0: continue
+        response = blocks[0]
+        node = files_to_make[i]
         target_node = f'{target}_{node}'
         for correspondance in arr_from_sep_string(response):
             source_node = f'{source}_{correspondance[len(get_working_dir(source)) + 1:]}'
             correspondance_graph.add_edge(target_node, source_node)
 
     # Translate the code in the proposed file tree
-    files_to_make = target_file_tree.reverse_level_order()
     async def make_file(node):
-        if 'content' not in target_file_tree.nodes[node]: return None
         relevant_files = [file[len(target) + 2:] for file in correspondance_graph[f'{target}_{node}']]
         actually_relevant_files = []
         for source_file in source_file_tree.nodes:
@@ -172,7 +165,7 @@ async def translate():
             ) for file in actually_relevant_files
         ]
         raw_resp = await swe.async_chat(
-            f"Translate the prior code from {source} to {target} to create {node}:",
+            f"You are given the following file tree:\n{target_file_tree}\nUsing the context from the prior {source} code, write code in {target} to create {node}:",
             custom_context=custom_context
         )
         blocks = extract_markdown_blocks(raw_resp)
@@ -181,26 +174,25 @@ async def translate():
     tasks = [make_file(node) for node in files_to_make]
     responses = await asyncio.gather(*tasks)
     for i, response in enumerate(responses):
-        if not response: continue
         target_file_tree.nodes[files_to_make[i]]['content'] = response
         with open(f'{working_dir_path}\\{files_to_make[i]}', 'w') as f:
             f.write(response)
 
     # Commit the translated code
-    repo.git.add(A=True)
-    repo.index.commit(f"Translate code from {source} to {target}")
-    # Push the branch to the remote repository
-    repo.git.push("origin", created_branch)
+    repo.commit(A=True, m=f"Boilerplate {target} code")
+    # Push the changes to the remote repo by force
+    repo.git.push('origin', created_branch, force=True)
 
     # Create a pull request with the translated code
-    return create_pull_request(
+    pr = create_pull_request(
             repo=repo,
             base_branch=base_branch,
             new_branch=created_branch,
             title=f"Translation from {source} to {target}",
-            body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated.",
+            body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated before merging.",
             token=GITHUB_TOKEN
         )
+    os.rmdir(local_repo_path)
 
 
 if __name__ == '__main__':
