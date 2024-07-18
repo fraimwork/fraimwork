@@ -33,3 +33,21 @@ def kosarajus(G: nx.DiGraph) -> nx.DiGraph:
 
     return dag
 
+def dag_to_levels(dag: nx.DiGraph):
+    if not nx.is_directed_acyclic_graph(dag):
+        raise ValueError("Input graph is not a DAG")
+    level_dict = []
+    graph_copy = dag.copy()
+    sources = set([node for node in graph_copy.nodes if graph_copy.in_degree(node) == 0])
+    while len(graph_copy.nodes) > 0:
+        level_dict.append(sources)
+        neighbors = [neighbor for source in sources for neighbor in graph_copy[source]]
+        graph_copy.remove_nodes_from(sources)
+        sources = set([node for node in neighbors if graph_copy.in_degree(node) == 0])
+    return level_dict
+
+def loose_level_order(G: nx.DiGraph):
+    G = kosarajus(G)
+    levels = dag_to_levels(G)
+    return [set([subnode for node in level for subnode in G.nodes[node]['subnodes']]) for level in levels]
+

@@ -3,14 +3,15 @@ import os
 from functools import lru_cache
 
 class FileTree(nx.DiGraph):
-    def __init__(root_path):
-        super().__init__(build_file_tree_dag(root_path))
-        
     def reverse_level_order(self):
         return list(nx.topological_sort(self))[::-1]
     
     def root_node(self):
         return '.'
+    
+    @staticmethod
+    def from_dir(root_path):
+        return build_file_tree_dag(root_path)
     
     @lru_cache
     def leaf_nodes(self):

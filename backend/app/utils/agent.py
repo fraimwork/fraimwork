@@ -70,7 +70,7 @@ class Agent:
             f.write(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}\n\nLog time: {time_string}\n\n")
 
     def chat(self, prompt, asker="user", custom_context=None):
-        history = [message for interaction in context for message in interaction.to_dict()]
+        history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
         for _ in range(5):
             try:
@@ -82,12 +82,12 @@ class Agent:
                 time.sleep(2)
     
     async def async_chat(self, prompt, asker="user", custom_context: list[Interaction] = None):
-        history = [message for interaction in context for message in interaction.to_dict()]
+        history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
         for _ in range(5):
             try:
                 response = await session.send_message_async(prompt)
-                self._log_interaction(Interaction(prompt, response, asker))
+                self._log_interaction(Interaction(prompt, response.text, asker))
                 return response.text
             except Exception as e:
                 print(e)
@@ -98,20 +98,20 @@ class Team:
         self.agents = {agent.name: agent for agent in agents}
         self.context_threads = defaultdict(list[Interaction])
     
-    def chat_with_agent(agent_name, message, context_keys=[], save_keys=[], prompt_title=None):
+    def chat_with_agent(self, agent_name, message, context_keys=[], save_keys=[], prompt_title=None):
         agent = self.agents[agent_name]
         custom_context = [interaction for key in context_keys for interaction in self.context_threads[key]]
         response = agent.chat(message, custom_context=custom_context)
         user_prompt = message if not prompt_title else prompt_title
         for key in save_keys:
-            self.context_threads[key].append(Interaction(user_prompt, response, responder=agent_name))
+            self.context_threads[key].append(Interaction(user_prompt, response))
         return response
 
-    async def async_chat_with_agent(agent_name, message, context_keys=None, save_keys=None, prompt_title=None):
+    async def async_chat_with_agent(self, agent_name, message, context_keys=[], save_keys=[], prompt_title=None):
         agent = self.agents[agent_name]
         custom_context = [interaction for key in context_keys for interaction in self.context_threads[key]]
         response = await agent.async_chat(message, custom_context=custom_context)
         user_prompt = message if not prompt_title else prompt_title
         for key in save_keys:
-            self.context_threads[key].append(Interaction(user_prompt, response, responder=agent_name))
+            self.context_threads[key].append(Interaction(user_prompt, response))
         return response

@@ -125,7 +125,7 @@ Classes:
     )
     team = Team(swe, pm, summarizer)
 
-    # Get the file structure of the original repo and the proposed file structure of the new repo
+    # Summarize the original repo
     source_file_tree = FileTree(working_dir_path)
     source_reverse_level_order = [node for node in source_file_tree.reverse_level_order() if 'content' in source_file_tree.nodes[node]]
     async def task(node):
@@ -214,8 +214,8 @@ Classes:
             body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated before merging.",
             token=GITHUB_TOKEN
         )
-    
     shutil.rmtree('./tmp/', ignore_errors=True)
+    return pr
 
 
 if __name__ == '__main__':
