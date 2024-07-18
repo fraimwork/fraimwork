@@ -3,6 +3,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from collections import defaultdict
 import asyncio
 import time
+import networkx as nx
 
 class GenerationConfig:
     def __init__(self, temperature=1.0, top_p=0.95, top_k=64, max_output_tokens=8192, response_mime_type="text/plain"):
@@ -41,25 +42,25 @@ class SafetySettings:
         }
 
 class Interaction:
-    def __init__(self, prompt, response, asker="user"):
+    def __init__(self, prompt, response, asker="user", responder="model"):
         self.prompt = prompt
         self.response = response
         self.asker = asker
+        self.responder = responder
     
     def to_dict(self):
         return {
             'role': self.asker,
             'parts': [self.prompt],
         }, {
-            'role': 'model',
+            'role': self.responder,
             'parts': [self.response],
         }
 
 class Agent:
-    def __init__(self, model_name, api_key, name="Agent", generation_config=GenerationConfig(), system_prompt=None, safety_settings=SafetySettings()):
+    def __init__(self, model_name, api_key, name, generation_config=GenerationConfig(), system_prompt=None, safety_settings=SafetySettings()):
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model_name, system_instruction=system_prompt, generation_config=generation_config.to_dict(), safety_settings=safety_settings.to_dict())
-        self.keyed_interactions = defaultdict(list[Interaction])
         self.name = name
 
     def _log_interaction(self, interaction: Interaction):
@@ -68,31 +69,49 @@ class Agent:
         with open(f'./logs/{self.name}.log', 'a', encoding='utf-8') as f:
             f.write(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}\n\nLog time: {time_string}\n\n")
 
-    def _build_context(self, key="all", context=None):
-        if context: return [message for interaction in context for message in interaction.to_dict()]
-        elif not key: return []
-        return [message for interaction in self.keyed_interactions[key] for message in interaction.to_dict()]
-    
-    def add_to_context(self, prompt, response, asker, key="all"):
-        interaction = Interaction(prompt, response, asker)
-        self.keyed_interactions["all"].append(interaction)
-        if key != "all": self.keyed_interactions[key].append(interaction)
-        self._log_interaction(interaction)
-    
-    def chat(self, prompt, context_key=None, asker="user", save_context="all", custom_context=None):
-        history = self._build_context(context_key, custom_context)
+    def chat(self, prompt, asker="user", custom_context=None):
+        history = [message for interaction in context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
-        response = session.send_message(prompt).text
-        self.add_to_context(prompt, response, asker, save_context)
-        return response
+        for _ in range(5):
+            try:
+                response = session.send_message(prompt).text
+                self._log_interaction(Interaction(prompt, response, asker))
+                return response
+            except Exception as e:
+                print(e)
+                time.sleep(2)
     
-    async def async_chat(self, prompt, context_key=None, asker="user", save_context="all", custom_context=None):
-        history = self._build_context(context_key, custom_context)
+    async def async_chat(self, prompt, asker="user", custom_context: list[Interaction] = None):
+        history = [message for interaction in context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
         for _ in range(5):
             try:
                 response = await session.send_message_async(prompt)
+                self._log_interaction(Interaction(prompt, response, asker))
                 return response.text
             except Exception as e:
                 print(e)
                 await asyncio.sleep(2)
+
+class Team:
+    def __init__(self, *agents):
+        self.agents = {agent.name: agent for agent in agents}
+        self.context_threads = defaultdict(list[Interaction])
+    
+    def chat_with_agent(agent_name, message, context_keys=[], save_keys=[], prompt_title=None):
+        agent = self.agents[agent_name]
+        custom_context = [interaction for key in context_keys for interaction in self.context_threads[key]]
+        response = agent.chat(message, custom_context=custom_context)
+        user_prompt = message if not prompt_title else prompt_title
+        for key in save_keys:
+            self.context_threads[key].append(Interaction(user_prompt, response, responder=agent_name))
+        return response
+
+    async def async_chat_with_agent(agent_name, message, context_keys=None, save_keys=None, prompt_title=None):
+        agent = self.agents[agent_name]
+        custom_context = [interaction for key in context_keys for interaction in self.context_threads[key]]
+        response = await agent.async_chat(message, custom_context=custom_context)
+        user_prompt = message if not prompt_title else prompt_title
+        for key in save_keys:
+            self.context_threads[key].append(Interaction(user_prompt, response, responder=agent_name))
+        return response

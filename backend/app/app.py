@@ -1,12 +1,11 @@
-import os, json, asyncio, networkx as nx
+import os, json, shutil, asyncio, networkx as nx
 from flask import Flask, request
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo, create_branch
-from utils.agent import Agent, GenerationConfig, Interaction
+from utils.agent import Agent, GenerationConfig, Interaction, Team
 from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
 from utils.filetreeutils import FileTree, write_file_tree
 from dotenv import load_dotenv
-from utils.team import Team
 
 app = Flask(__name__)
 CORS(app)
@@ -91,9 +90,8 @@ async def translate():
         api_key=API_KEY,
         name="swe",
         generation_config=GenerationConfig(temperature=0.9),
-        system_prompt="You are a software engineer tasked with translating code from one framework to another. Respond with code and nothing else."
+        system_prompt=f"You are a software engineer tasked with writing {target} code based on a {source} repo. Respond with code and nothing else."
     )
-
     pm = Agent(
         model_name=MODEL_NAME,
         api_key=API_KEY,
@@ -101,9 +99,34 @@ async def translate():
         generation_config=GenerationConfig(max_output_tokens=4000),
         system_prompt="You are a high-level technical project manager tasked with the project of translating a framework. In the following prompts, you will be given instructions on what to do. Answer them to the best of your knowledge."
     )
+    summarizer = Agent(
+        model_name=MODEL_NAME,
+        api_key=API_KEY,
+        name="summarizer",
+        system_prompt='''You are a code summarizer. Your job is to summarize the functionality of a code file. Include all classes, functions and their params, and dependencies in your summary. Below is an example of how you might structure your response:
+
+<3 sentence summary>.
+
+Dependencies:
+...
+...
+
+Classes:
+`Pet`: describes the abstract class for a pet
+- `changeOwner(newOwner) - Function changes the owner of the pet to `newOwner`
+
+`Dog`: describes the blueprint class for a dog. Is a subtype of `Animal`
+- `bark()`- prints "woof" to the console
+- `changeOwner(newOwner)`- Function changes the owner of the dog to `newOwner`
+
+`Cat`: describes the blueprint class for a cat. Is a subtype of `Pet`
+- `meow()`- prints "meow" to the console
+- `changeOwner(newOwner)`- Function changes the owner of the cat to `newOwner`'''
+    )
+    team = Team(swe, pm, summarizer)
 
     # Get the file structure of the original repo and the proposed file structure of the new repo
-    source_file_tree = FileTree.from_directory(working_dir_path)
+    source_file_tree = FileTree(working_dir_path)
     source_reverse_level_order = [node for node in source_file_tree.reverse_level_order() if 'content' in source_file_tree.nodes[node]]
     async def task(node):
         return await pm.async_chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
@@ -125,7 +148,7 @@ async def translate():
     working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
     write_file_tree(raw_tree, working_dir_path)
     repo.commit(A=True, m="A New Hope")
-    target_file_tree = FileTree.from_directory(working_dir_path)
+    target_file_tree = FileTree(working_dir_path)
 
     # Create a correspondence graph between the two file trees
     correspondance_graph = nx.DiGraph()
@@ -180,7 +203,6 @@ async def translate():
 
     # Commit the translated code
     repo.commit(A=True, m=f"Boilerplate {target} code")
-    # Push the changes to the remote repo by force
     repo.git.push('origin', created_branch, force=True)
 
     # Create a pull request with the translated code
@@ -192,7 +214,8 @@ async def translate():
             body=f"This is a boilerplate translation performed by the Fraimwork app. Please check to make sure that all logic is appropriately translated before merging.",
             token=GITHUB_TOKEN
         )
-    os.rmdir(local_repo_path)
+    
+    shutil.rmtree('./tmp/', ignore_errors=True)
 
 
 if __name__ == '__main__':
