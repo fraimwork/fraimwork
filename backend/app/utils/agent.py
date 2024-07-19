@@ -94,7 +94,7 @@ class Agent:
                 await asyncio.sleep(2)
 
 class Team:
-    def __init__(self, *agents):
+    def __init__(self, *agents: Agent):
         self.agents = {agent.name: agent for agent in agents}
         self.context_threads = defaultdict(list[Interaction])
     

@@ -61,7 +61,7 @@ def filetree_to_string(tree: FileTree):
         return result
     return dfs(tree.root_node())
 
-def write_file_tree(file_tree_string, base_dir):
+def write_file_tree(file_tree_string: str, base_dir: str):
     lines = file_tree_string.split('\n')
     stack = [base_dir]
     

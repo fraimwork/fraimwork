@@ -47,6 +47,9 @@ def dag_to_levels(dag: nx.DiGraph):
     return level_dict
 
 def loose_level_order(G: nx.DiGraph):
+    '''
+    Given a directed graph G, returns a list of levels where each level is a list of sets denoting SCCs.
+    '''
     G = kosarajus(G)
     levels = dag_to_levels(G)
     return [[set([subnode for subnode in G.nodes[node]['subnodes']]) for node in level] for level in levels]

@@ -33,3 +33,23 @@ def remove_indents(string: str):
     str: The string with leading whitespace removed from each line.
     """
     return "\n".join([line.lstrip() for line in string.split("\n")])
+
+def extract_snippet(text, snippet, padding):
+    """
+    Extract a snippet from a string.
+
+    Parameters:
+    text (str): The input string containing the snippet.
+    snippet (str): The snippet to extract.
+    padding (int): The number of lines to include before and after the snippet.
+
+    Returns:
+    str: The extracted snippet.
+    """
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if snippet in line:
+            start = max(0, i - padding)
+            end = min(len(lines), i + padding + 1)
+            return "\n".join(lines[start:end])
+    return None
