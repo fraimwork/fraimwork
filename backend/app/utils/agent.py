@@ -1,5 +1,6 @@
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.generativeai.caching import CachedContent
 from collections import defaultdict
 import asyncio
 import time
@@ -60,8 +61,23 @@ class Interaction:
 class Agent:
     def __init__(self, model_name, api_key, name, generation_config=GenerationConfig(), system_prompt=None, safety_settings=SafetySettings()):
         genai.configure(api_key=api_key)
+        self.api_key = api_key
+        self.model_name = model_name
+        self.generation_config = generation_config
+        self.system_prompt = system_prompt
+        self.safety_settings = safety_settings
         self.model = genai.GenerativeModel(model_name, system_instruction=system_prompt, generation_config=generation_config.to_dict(), safety_settings=safety_settings.to_dict())
         self.name = name
+    
+    def cache_context(context: list[Interaction]):
+        contents = [message for interaction in context for message in interaction.to_dict()]
+        cached_content = CachedContent.create(
+            model_name=self.model_name,
+            system_instruction=self.system_prompt,
+            contents=contents,
+            ttl=datetime.timedelta(minutes=5),
+            )
+        self.model = genai.GenerativeModel.from_cached_content(cached_content)
 
     def _log_interaction(self, interaction: Interaction):
         prompt, response = interaction.to_dict()
@@ -69,7 +85,7 @@ class Agent:
         with open(f'./logs/{self.name}.log', 'a', encoding='utf-8') as f:
             f.write(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}\n\nLog time: {time_string}\n\n")
 
-    def chat(self, prompt, asker="user", custom_context=None):
+    def chat(self, prompt, asker="user", custom_context=[]):
         history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
         for _ in range(5):
@@ -81,7 +97,7 @@ class Agent:
                 print(e)
                 time.sleep(2)
     
-    async def async_chat(self, prompt, asker="user", custom_context: list[Interaction] = None):
+    async def async_chat(self, prompt, asker="user", custom_context: list[Interaction] = []):
         history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
         for _ in range(5):
