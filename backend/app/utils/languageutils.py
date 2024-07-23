@@ -1,7 +1,6 @@
 from utils.filetreeutils import FileTree
 from abc import ABC, abstractmethod
-import networkx as nx
-import os, re
+import os, re, networkx as nx
 
 class LanguageAnalyzer(ABC):
     def __init__(self, path, *extensions):

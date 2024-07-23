@@ -50,9 +50,9 @@ def loose_level_order(G: nx.DiGraph):
     '''
     Given a directed graph G, returns a list of levels where each level is a list of sets denoting SCCs.
     '''
-    dag = remove_cycle_from_digraph(G)
+    SCC = kosarajus(G)
     levels = dag_to_levels(SCC)
-    return levels
+    return [[set(G.nodes[node]['subnodes']) for node in level] for level in levels]
 
 
 def remove_cycle_from_digraph(G):

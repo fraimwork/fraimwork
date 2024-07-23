@@ -88,7 +88,7 @@ class Agent:
     def chat(self, prompt, asker="user", custom_context=[]):
         history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
-        for _ in range(5):
+        for _ in range(3):
             try:
                 response = session.send_message(prompt).text
                 self._log_interaction(Interaction(prompt, response, asker))
@@ -100,7 +100,7 @@ class Agent:
     async def async_chat(self, prompt, asker="user", custom_context: list[Interaction] = []):
         history = [message for interaction in custom_context for message in interaction.to_dict()]
         session = self.model.start_chat(history=history)
-        for _ in range(5):
+        for _ in range(3):
             try:
                 response = await session.send_message_async(prompt)
                 self._log_interaction(Interaction(prompt, response.text, asker))

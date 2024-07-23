@@ -3,7 +3,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo, create_branch
 from utils.agent import Agent, GenerationConfig, Interaction, Team
-from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, remove_indents
+from utils.stringutils import arr_from_sep_string, extract_markdown_blocks
 from utils.filetreeutils import FileTree, write_file_tree
 from dotenv import load_dotenv
 
@@ -129,7 +129,7 @@ Classes:
     source_file_tree = FileTree(working_dir_path)
     source_reverse_level_order = [node for node in source_file_tree.reverse_level_order() if 'content' in source_file_tree.nodes[node]]
     async def task(node):
-        return await pm.async_chat(f'Summarize the functionality of the following code, be brief and to the point:\n{remove_indents(source_file_tree.nodes[node]["content"])}')
+        return await pm.async_chat(f'Summarize the functionality of the following code, be brief and to the point:\n{source_file_tree.nodes[node]["content"]}')
     tasks = [task(node) for node in source_reverse_level_order]
     responses = await asyncio.gather(*tasks)
     for i, response in enumerate(responses):
@@ -183,7 +183,7 @@ Classes:
                     actually_relevant_files.append(source_file)
         custom_context = [
             Interaction(
-                prompt=f'{file}:\n{remove_indents(source_file_tree.nodes[file]["content"])}',
+                prompt=f'{file}:\n{source_file_tree.nodes[file]["content"]}',
                 response='Waiting for instructions to translate...',
             ) for file in actually_relevant_files
         ]
