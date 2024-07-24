@@ -70,7 +70,7 @@ def write_file_tree(file_tree_string: str, base_dir: str):
         current_dir = stack[indent_level // 4]  # Assuming 4 spaces per indentation level
         new_path = os.path.join(current_dir, line.split(' ')[-1])
         
-        if line.endswith('\\'):
+        if line.endswith('\\') or not '.' in line:
             os.makedirs(new_path, exist_ok=True)
             if len(stack) > indent_level // 4 + 1:
                 stack[indent_level // 4 + 1] = new_path

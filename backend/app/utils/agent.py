@@ -3,7 +3,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from google.generativeai.caching import CachedContent
 from collections import defaultdict
 import asyncio
-import time
+import time, datetime
 import networkx as nx
 
 class GenerationConfig:
@@ -69,10 +69,10 @@ class Agent:
         self.model = genai.GenerativeModel(model_name, system_instruction=system_prompt, generation_config=generation_config.to_dict(), safety_settings=safety_settings.to_dict())
         self.name = name
     
-    def cache_context(context: list[Interaction]):
+    def cache_context(self, context: list[Interaction]):
         contents = [message for interaction in context for message in interaction.to_dict()]
         cached_content = CachedContent.create(
-            model_name=self.model_name,
+            model=self.model_name,
             system_instruction=self.system_prompt,
             contents=contents,
             ttl=datetime.timedelta(minutes=5),
