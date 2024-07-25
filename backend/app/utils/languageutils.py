@@ -27,16 +27,27 @@ class DartAnalyzer(LanguageAnalyzer):
                 file_path = f'{dirpath}/{filename}'
                 relative_path = os.path.relpath(file_path, self.path)
                 u = os.path.relpath(os.path.join(dirpath, filename), self.path)
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                    G.add_node(u, content=content)
                 if any(filename.endswith(ext) for ext in self.extensions):
                     with open(file_path, 'r') as f:
                         content = f.read()
                         for imp in import_pattern.findall(content):
                             # First try the import as an absolute path
                             if os.path.exists(absimppath := os.path.join(self.path, imp)):
-                                G.add_edge(u, os.path.relpath(absimppath, self.path))
+                                path = os.path.relpath(absimppath, self.path)
+                                with open(absimppath, 'r') as f:
+                                    content = f.read()
+                                    G.add_node(path, content=content)
+                                G.add_edge(u, path)
                             # Next try the import as a relative path
                             elif os.path.exists(relimppath := os.path.join(dirpath, imp)):
-                                G.add_edge(u, os.path.relpath(relimppath, self.path))
+                                path = os.path.relpath(relimppath, self.path)
+                                with open(relimppath, 'r') as f:
+                                    content = f.read()
+                                    G.add_node(path, content=content)
+                                G.add_edge(u, path)
         return G
 
 
