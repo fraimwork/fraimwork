@@ -68,6 +68,7 @@ class Agent:
         self.safety_settings = safety_settings
         self.model = genai.GenerativeModel(model_name, system_instruction=system_prompt, generation_config=generation_config.to_dict(), safety_settings=safety_settings.to_dict())
         self.name = name
+        self.estimated_total_cost = 0
     
     def cache_context(self, context: list[Interaction], ttl=datetime.timedelta(minutes=5)):
         contents = [message for interaction in context for message in interaction.to_dict()]
@@ -78,12 +79,24 @@ class Agent:
             ttl=ttl,
             )
         self.model = genai.GenerativeModel.from_cached_content(cached_content)
+    
+    def estimate_cost(self, context, prompt, response):
+        prompt_tokens = self.model.count_tokens(context + prompt).total_tokens
+        response_tokens = self.model.count_tokens(response).total_tokens
+        match self.model_name:
+            case "gemini-1.5-flash-001":
+                return (0.35/10**6) * prompt_tokens + (1.05/10**6) * response_tokens
+            case _:
+                return 1
+    
+    def _log_string(self, string):
+        time_string = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        with open(f'./logs/{self.name}.log', 'a', encoding='utf-8') as f:
+            f.write(f"{string}\n\nLog time: {time_string}\n\n")
 
     def _log_interaction(self, interaction: Interaction):
         prompt, response = interaction.to_dict()
-        time_string = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        with open(f'./logs/{self.name}.log', 'a', encoding='utf-8') as f:
-            f.write(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}\n\nLog time: {time_string}\n\n")
+        self._log_string(f"{prompt['role']}: {prompt['parts'][0]}\n\n{response['role']}: {response['parts'][0]}")
 
     def chat(self, prompt, asker="user", custom_context=[]):
         history = [message for interaction in custom_context for message in interaction.to_dict()]
@@ -92,6 +105,9 @@ class Agent:
             try:
                 response = session.send_message(prompt).text
                 self._log_interaction(Interaction(prompt, response, asker))
+                prompt_cost = self.estimate_cost('\n'.join(message['parts'][0] for message in history), prompt, response)
+                self.estimated_total_cost += prompt_cost
+                self._log_string(f"Prompt cost: {prompt_cost}\nEstimated total cost: {self.estimated_total_cost}")
                 return response
             except Exception as e:
                 print(e)
@@ -104,6 +120,9 @@ class Agent:
             try:
                 response = await session.send_message_async(prompt)
                 self._log_interaction(Interaction(prompt, response.text, asker))
+                prompt_cost = self.estimate_cost('\n'.join(message['parts'][0] for message in history), prompt, response.text)
+                self.estimated_total_cost += prompt_cost
+                self._log_string(f"Prompt cost: {prompt_cost}\nEstimated total cost: {self.estimated_total_cost}")
                 return response.text
             except Exception as e:
                 print(e)

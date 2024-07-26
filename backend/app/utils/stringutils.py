@@ -1,4 +1,5 @@
 import re
+from collections import defaultdict
 
 def arr_from_sep_string(string: str, sep=','):
     return [x.strip() for x in string.split(sep)]
@@ -41,3 +42,32 @@ def extract_snippet(text, snippet, padding):
             end = min(len(lines), i + padding + 1)
             return '\n'.join(lines[start:end])
     return None
+
+def markdown_to_dict(markdown: str) -> dict:
+    # Regular expression to match headers
+    header_regex = re.compile(r'^(#+)\s*(.*)', re.MULTILINE)
+    
+    # Dictionary to store the result
+    result = defaultdict(str)
+    
+    # Find all headers
+    headers = [(m.group(1).count('#'), m.group(2), m.start()) for m in header_regex.finditer(markdown)]
+    
+    # Sort headers by their position in the text
+    headers.sort(key=lambda x: x[2])
+    
+    for i in range(len(headers)):
+        current_header = headers[i]
+        header_level, header_text, header_start = current_header
+        
+        # Find the end of the current header's content
+        if i + 1 < len(headers):
+            next_header_start = headers[i + 1][2]
+            content = markdown[header_start + len(current_header[1]) + header_level + 1:next_header_start].strip()
+        else:
+            content = markdown[header_start + len(current_header[1]) + header_level + 1:].strip()
+        
+        # Add to result dictionary
+        result[header_text.lower()] = content
+    
+    return dict(result)
