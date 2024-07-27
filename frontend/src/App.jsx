@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import LogoLight from './assets/logos/logo-light.png';
 import LogoDark from './assets/logos/logo-dark.png'
-import { Steps, Button, List, Typography, Input, Select, Card } from 'antd';
+import { Steps, List, Typography, Input, Select } from 'antd';
+import { Button, Card } from 'ui-neumorphism'
+import 'ui-neumorphism/dist/index.css'
 import Spacer from './components/Spacer';
 import { translate } from './models/BackendModel';
 
@@ -122,7 +124,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}> {/* Centering container */}
                 <img src={LogoDark} alt="App Logo" style={{ width: '150px', borderRadius: '30px' }} /> {/* Add the logo */}
             </div>
-            <Card 
+            <Card inset
                 style={{ 
                     backgroundColor: 'rgba(220, 255, 255, 0.7)', // Adjust transparency as needed
                     backdropFilter: 'blur(10px)', // Adjust blur intensity
@@ -136,7 +138,7 @@ function App() {
                     ))}
                 </Steps>
                 <Spacer height={20} />
-                <div>{getContent(activeStep)}</div>
+                <div style={{ padding: '50px 0' }}>{getContent(activeStep)}</div> {/* Add padding to the content */}
                 <Spacer height={20} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     {activeStep > 0 && (
@@ -146,7 +148,7 @@ function App() {
                         <Button type="primary" onClick={handleNext}  disabled={isLoading || !repoLink} loading={isLoading}>Next</Button>
                     )}
                     {activeStep === steps.length - 1 && (
-                        <Button type="primary">Done</Button>
+                        <Button>Done</Button>
                     )}
                 </div>
             </Card>
