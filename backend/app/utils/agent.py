@@ -70,11 +70,11 @@ class Agent:
         self.name = name
         self.estimated_total_cost = 0
     
-    def cache_context(self, context: list[Interaction], ttl=datetime.timedelta(minutes=5)):
+    def cache_context(self, context: list[Interaction], ttl=datetime.timedelta(minutes=5), model_name=None, system_prompt=None):
         contents = [message for interaction in context for message in interaction.to_dict()]
         cached_content = CachedContent.create(
-            model=self.model_name,
-            system_instruction=self.system_prompt,
+            model=self.model_name if not model_name else model_name,
+            system_instruction=self.system_prompt if not system_prompt else system_prompt,
             contents=contents,
             ttl=ttl,
             )

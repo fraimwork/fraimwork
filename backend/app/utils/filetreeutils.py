@@ -1,10 +1,17 @@
 import networkx as nx
 import os
 from functools import lru_cache
+from utils.stringutils import edit_distance
 
 class FileTree(nx.DiGraph):
-    def reverse_level_order(self):
-        return list(nx.topological_sort(self))[::-1]
+    def get_files(self):
+        return [node for node in self.nodes if 'content' in self.nodes[node]]
+    
+    def get_closest_file_name(self, file_name):
+        files = self.get_files()
+        # closest file by edit distance
+        closest_file = min(files, key=lambda x: edit_distance(x, file_name))
+        return closest_file
     
     def root_node(self):
         return '.'
@@ -70,7 +77,7 @@ def write_file_tree(file_tree_string: str, base_dir: str):
         current_dir = stack[indent_level // 4]  # Assuming 4 spaces per indentation level
         new_path = os.path.join(current_dir, line.split(' ')[-1])
         
-        if line.endswith('\\') or not '.' in line:
+        if line.endswith('\\'):
             os.makedirs(new_path, exist_ok=True)
             if len(stack) > indent_level // 4 + 1:
                 stack[indent_level // 4 + 1] = new_path

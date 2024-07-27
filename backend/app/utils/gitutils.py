@@ -45,14 +45,7 @@ def make_directories_from_tree(repo, tree: FileTree):
 def create_pull_request(repo, base_branch, new_branch, title, body, token):
     """
     Creates a pull request on GitHub.
-
-    :param repo: git.Repo object
-    :param base_branch: The branch you want to merge into (usually 'main' or 'master')
-    :param new_branch: The branch you want to merge from
-    :param title: The title of the pull request
-    :param body: The body description of the pull request
-    :param token: GitHub personal access token
-    :return: Response from the GitHub API
+    @return: Response from the GitHub API
     """
     # Extract the repository owner and name from the remote URL
     remote_url = repo.remotes.origin.url
