@@ -40,13 +40,13 @@ def build_file_tree_dag(root_path):
             parent_dir = os.path.relpath(dirpath, root_path)
             child_dir = os.path.relpath(os.path.join(dirpath, dirname), root_path)
             for node in [parent_dir, child_dir]:
-                dag.add_node(node, name=os.path.basename(node), path=f'{root_path}/{node}')
+                dag.add_node(node, name=os.path.basename(node), path=f'{root_path}\\{node}')
             dag.add_edge(parent_dir, child_dir)
         for filename in filenames:
             parent_dir = os.path.relpath(dirpath, root_path)
             child_file = os.path.relpath(os.path.join(dirpath, filename), root_path)
             for node in [parent_dir, child_file]:
-                dag.add_node(node, name=os.path.basename(node), path=f'{root_path}/{node}')
+                dag.add_node(node, name=os.path.basename(node), path=f'{root_path}\\{node}')
             with open(f'{root_path}/{child_file}', 'r') as f:
                 content = f.read()
                 dag.nodes[child_file]['content'] = content
