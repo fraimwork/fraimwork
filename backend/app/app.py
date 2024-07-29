@@ -114,10 +114,10 @@ async def translate():
 
 # filename.ext:
 
-$7 sentence summary of the functionality/contents of the file$
-    '''
+$7 sentence summary of the functionality/contents of the file$'''
     )
     team = Team(target_swe, pm, source_swe)
+
 
     analyzer = DartAnalyzer(working_dir_path)
 
@@ -125,6 +125,9 @@ $7 sentence summary of the functionality/contents of the file$
 
     # loose level order
     eval_order = loose_level_order(source_dependency_graph)[::-1]
+    for level in eval_order:
+        print(level)
+    print(f"Number of levels: {len(eval_order)}")
 
     (source_file_tree := FileTree.from_dir(working_dir_path))
 
@@ -139,7 +142,7 @@ $7 sentence summary of the functionality/contents of the file$
                 message=message,
                 context_keys=[f"summary_{neighbor}" for neighbor in source_dependency_graph[node]],
                 save_keys=[f"summary_{node}", "all"],
-                prompt_title=f"Summary of {name}"
+                prompt_title=f"Summary of {node}"
                 )
         tasks = [summarize(node) for node in group]
         responses = await asyncio.gather(*tasks)
@@ -150,61 +153,78 @@ $7 sentence summary of the functionality/contents of the file$
         await summarize_group(level)
         time.sleep(0.5)
 
+    curr_string = '\n'.join([message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict()])
+    (curr_tokens := pm.model.count_tokens(curr_string).total_tokens)
+
+    would_be_string = '\n'.join([source_file_tree.nodes[node]['content'] for node in source_dependency_graph.nodes])
+    (would_be_tokens := pm.model.count_tokens(would_be_string).total_tokens)
+
+    (percent_tokens_reduction := 1 - (curr_tokens / would_be_tokens))
+
     # Create new file tree
     prompt = f'''This is the file tree for the original {source} repo:
-```
-{get_working_dir(source)}\\
-{source_file_tree}
-```
-You are tasked with re-structuring the directory to create a file tree for the new react-native repo in the new working directory {get_working_dir(target)}\\. Format your response as follows:
-# Summary of Original Repo
-$less than 10 sentence summary of the original repo$
+    ```
+    {get_working_dir(source)}\\
+    {source_file_tree}
+    ```
+    You are tasked with re-structuring the directory to create a file tree for the new react-native repo in the new working directory {get_working_dir(target)}\\. Format your response as follows:
+    # Summary of Original Repo
+    $less than 10 sentence summary of the original repo$
 
-# Methodology of Translation
-$Brief explanation of what needs to be translated (include things like filename changes for entry points and other structural changes)$
+    # Methodology of Translation
+    $Brief explanation of what needs to be translated (include things like filename changes for entry points and other structural changes)$
 
-# File Tree
-```
-{get_working_dir(target)}\\
-├── folder1\\
-│   ├── file1.ext
-├── folder2\\
-│   ├── folder3\\
-│   │   ├── file2.ext
-```
-*Only include files of type(s) {extensions_of[target]} in your file tree
+    # File Tree
+    ```
+    {get_working_dir(target)}\\
+    ├── folder1\\
+    │   ├── file1.ext
+    ├── folder2\\
+    │   ├── folder3\\
+    │   │   ├── file2.ext
+    ```
+    *Only include files of type(s) {extensions_of[target]} in your file tree
 
-# All Correspondances
-$List all the files in the original repo and their corresponding file(s) in the new repo (N/A if no such file(s) exists)$
-```
-{get_working_dir(source)}\\path\\to\\{source}\\file1.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file1.ext, {get_working_dir(target)}\\...\\file2.ext
-{get_working_dir(source)}\\path\\to\\{source}\\file2.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file3.ext
-{get_working_dir(source)}\\path\\to\\{source}\\file_with_no_correspondant.ext --> N/A
-```
-'''
+    # All Correspondances
+    $List all the files in the original repo and their corresponding file(s) in the new repo (N/A if no such file(s) exists)$
+    ```
+    {get_working_dir(source)}\\path\\to\\{source}\\file1.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file1.ext, {get_working_dir(target)}\\path\\to\\{target}\\file2.ext
+    {get_working_dir(source)}\\path\\to\\{source}\\file2.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file3.ext
+    {get_working_dir(source)}\\path\\to\\{source}\\file_with_no_correspondant.ext --> N/A *do NOT provide a reason if n/a*
+    N/A *do NOT provide a reason if n/a* --> {get_working_dir(target)}\\path\\to\\{target}\\file_with_no_correspondant.ext
+    ```
+    '''
     response = team.chat_with_agent('pm', prompt, context_keys=['all'], save_keys=['all'], prompt_title=f"Translate file tree from {source} to {target}:\n```\n{get_working_dir(source)}\\\n{source_file_tree}```")
 
     response_dict = markdown_to_dict(response)
 
     raw_tree = extract_markdown_blocks(response_dict['file tree'])[0][len(get_working_dir(target)) + 2:]
 
+    wipe_repo(local_repo_path)
+    repo.git.commit(A=True, m="rm past")
+    working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
+    write_file_tree(raw_tree, working_dir_path)
+    repo.git.commit(A=True, m="A New Hope")
+    (target_file_tree := FileTree.from_dir(working_dir_path))
+
     correspondance_graph = nx.Graph()
     correspondences = arr_from_sep_string(extract_markdown_blocks(response_dict['all correspondances'])[0], '\n')
     for correspondence in correspondences:
         source_file, target_files = arr_from_sep_string(correspondence, ' --> ')
+        if target_files == "N/A": continue
         source_file = source_file[len(get_working_dir(source)) + 1:]
-        if not os.path.exists(f"{working_dir_path}\\{source_file}") or target_files == "N/A": continue
+        if not source_file_tree.has_node(source_file): continue
         target_files = arr_from_sep_string(target_files)
         for target_file in target_files:
             target_file = target_file[len(get_working_dir(target)) + 1:]
+            if not target_file_tree.has_node(target_file): continue
             correspondance_graph.add_edge(source_file, target_file)
 
-    wipe_repo(local_repo_path)
-    # repo.git.commit(A=True, m="Let the past die. Kill it if you have to")
-    working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
-    write_file_tree(raw_tree, working_dir_path)
-    # repo.git.commit(A=True, m="A New Hope")
-    (target_file_tree := FileTree.from_dir(working_dir_path))
+    # print edges
+    for edge in correspondance_graph.edges:
+        print(edge)
+
+    pm.model.count_tokens('\n'.join(message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict())).total_tokens
 
     # Cache the context threads
     factor = 32768 / pm.model.count_tokens('\n'.join(message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict())).total_tokens
@@ -218,8 +238,9 @@ $List all the files in the original repo and their corresponding file(s) in the 
     order = [node for node in target_file_tree.nodes if 'content' in target_file_tree.nodes[node]]
     async def build_description(node):
         prompt = f'''For the file {node} in the new {target} repo. I want you to provide the following write-up:
-$A brief description of what the file should contain (classes, functions, views etc.) in 20 lines or less$
-'''
+    $A brief description of what the file should contain (classes, functions, views etc.) in 20 lines or less$
+    $Example usage$
+    '''
         return await team.async_chat_with_agent('pm', prompt, save_keys=[f"description_{node}"], prompt_title=f"Description of what to build for {node}")
     tasks = [build_description(node) for node in order]
     descriptions = await asyncio.gather(*tasks)
@@ -232,59 +253,76 @@ $A brief description of what the file should contain (classes, functions, views 
         for node in level:
             if node not in correspondance_graph.nodes: continue
             # We add the correspondant node to the target dependency graph and connect it to the correspondant nodes of the source dependency graph
-            target_nodes = list(correspondance_graph.neighbors(node))
+            target_nodes = list(correspondance_graph[node])
             for target_node in target_nodes:
+                target_node = target_node
                 target_dependency_graph.add_node(target_node)
-                for source_node in source_dependency_graph.neighbors(node):
+                for source_node in source_dependency_graph[node]:
                     if source_node not in correspondance_graph.nodes: continue
-                    source_node_correspondants = list(correspondance_graph.neighbors(source_node))
+                    source_node_correspondants = list(correspondance_graph[source_node])
                     for source_node_correspondant in source_node_correspondants:
                         target_dependency_graph.add_edge(target_node, source_node_correspondant)
 
     # label each node in target dependency graph with a description
     for node in target_dependency_graph.nodes:
         target_dependency_graph.nodes[node]['description'] = ""
+        if node not in target_file_tree.nodes:
+            # maybe remove the node from the target dependency graph
+            continue
         if 'content' not in target_file_tree.nodes[node]: continue
         description = target_file_tree.nodes[node]['description']
         target_dependency_graph.nodes[node]['description'] = description
 
-    eval_order = loose_level_order(target_dependency_graph, key='description')[::-1]
+    target_eval_order = loose_level_order(target_dependency_graph, key='description')[::-1]
+    for level in target_eval_order:
+        print(level)
+    print(f"Number of levels: {len(target_eval_order)}")
 
-    # Translate the code in the proposed file tree
-    async def make_level(group: list):
-        async def make_file(node):
-            if node not in target_file_tree.nodes: return None
-            if node not in correspondance_graph.nodes: return None
-            relevant_files = [file[len(source) + 2:] for file in correspondance_graph[node]]
-            depends_on = [file for file in target_dependency_graph[node]]
-            custom_context = [
-                Interaction(
-                    prompt=f'Contents of {file} in the {target} repo. This file is a dependency of {node} whose relative path is {os.path.relpath(file, node)}',
-                    response=target_file_tree.nodes[file]["content"]
-                ) for file in depends_on if file in target_file_tree.nodes and 'content' in target_file_tree.nodes[file]
-            ] + [
-                Interaction(
-                    prompt=f'Contents of {file} in the {source} repo',
-                    response=f'{file}:\n{source_file_tree.nodes[file]["content"]}',
-                ) for file in relevant_files if file in source_file_tree.nodes and 'content' in source_file_tree.nodes[file]
-            ] + team.context_threads[f'description_{node}']
-            raw_resp = await target_swe.async_chat(
-                f"Using the context from the prior {source} code and used {target} code, write code in {target} to create {node}. Respond with code and nothing else.",
-                custom_context=custom_context
-            )
-            blocks = extract_markdown_blocks(raw_resp)
-            if len(blocks) == 0: return None
-            return blocks[0]
-        tasks = [make_file(node) for node in group]
-        responses = await asyncio.gather(*tasks)
-        for i, response in enumerate(responses):
-            if response is None: continue
-            target_file_tree.nodes[group[i]]['content'] = response
-            with open(f'{working_dir_path}\\{group[i]}', 'w') as f:
-                f.write(response)
-    for level in eval_order:
-        await make_level(level)
-        time.sleep(0.5)
+    # print all relative paths
+    for level in target_eval_order:
+        for node in level:
+            print(node)
+            print(f"Relevant files: {list(correspondance_graph[node])}")
+            print(f"Depends on: {list(target_dependency_graph[node])}")
+            dependencies = '\n'.join(os.path.relpath(target_file_tree.nodes[file]['path'], target_file_tree.nodes[node]['path']) for file in target_dependency_graph[node])
+            print(f"Dependencies: {dependencies}")
+            print("-" * 20)
+        print('-' * 20)
+
+    async def make_file(node):
+        if node not in target_file_tree.nodes: return None
+        if node not in correspondance_graph.nodes:
+            print(node)
+            return None
+        relevant_files = list(correspondance_graph[node])
+        depends_on = list(target_dependency_graph[node])
+        dependencies = '\n'.join(os.path.relpath(file, node) for file in depends_on)
+        custom_context = [
+            Interaction(
+                prompt=f'Description of {file} in the {target} repo. This file is a dependency of {node}.',
+                response=target_file_tree.nodes[file]["description"]
+            ) for file in depends_on if file in target_file_tree.nodes and 'content' in target_file_tree.nodes[file]
+        ] + [
+            Interaction(
+                prompt=f'Contents of {file} in the {source} repo',
+                response=f'{file}:\n{source_file_tree.nodes[file]["content"]}',
+            ) for file in relevant_files if file in source_file_tree.nodes and 'content' in source_file_tree.nodes[file]
+        ] + team.context_threads[f'description_{node}']
+        raw_resp = await target_swe.async_chat(
+            f"The relative dependencies for {node} are\n{dependencies}. Using the context from the prior {source} code (to be translated) and {target} code which {node} depends on, write code in {target} to create {node}. Respond with code and nothing else.",
+            custom_context=custom_context
+        )
+        blocks = extract_markdown_blocks(raw_resp)
+        if len(blocks) == 0: return None
+        return blocks[0]
+    nodes = [node for level in target_eval_order for node in level]
+    tasks = [make_file(node) for node in nodes]
+    responses = await asyncio.gather(*tasks)
+    for i, response in enumerate(responses):
+        if response is None: continue
+        target_file_tree.nodes[nodes[i]]['content'] = response
+        with open(f'{working_dir_path}\\{nodes[i]}', 'w') as f:
+            f.write(response)
 
     # Commit the translated code
     repo.git.commit(A=True, m=f"Boilerplate {target} code")

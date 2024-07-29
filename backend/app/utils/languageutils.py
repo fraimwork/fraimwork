@@ -1,6 +1,46 @@
-from utils.filetreeutils import FileTree
 from abc import ABC, abstractmethod
 import os, re, networkx as nx
+from types import NoneType
+import json
+
+def patterns(ext):
+    match ext:
+        case '.py':
+            return re.compile(r'^\s*(?:import|from)\s+(\S+)', re.MULTILINE)
+        case '.dart':
+            return re.compile(r"import\s+'([^']+)'")
+        case '.jsx' | '.js' | '.ts' | '.tsx':
+            return re.compile(r"""
+            ^\s*                                # Start of line, allowing leading whitespace
+            import\s+                           # 'import' keyword followed by whitespace
+            (?:
+                (?:[\w*{}\s,]+)\s+from\s+       # Named imports or wildcard import followed by 'from'
+                |
+                (?=[^'"]*['"])                  # Lookahead to ensure there's a module specifier
+            )
+            ['"]                                # Opening quote for module specifier
+            ([^'"]+)                            # Module specifier
+            ['"]                                # Closing quote for module specifier
+        """, re.VERBOSE | re.MULTILINE)
+        case _: return None
+
+def get_imports(file_path: str) -> list[str] | NoneType:
+    _, ext = os.path.splitext(file_path)
+    pattern = patterns(ext)
+    if not pattern: return None
+    imports = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        if ext == '.ipynb':
+            return None
+            notebook_content = json.load(f)
+            for cell in notebook_content.get('cells', []):
+                if cell.get('cell_type') == 'code':
+                    cell_source = ''.join(cell.get('source', []))
+                    imports.extend(pattern.findall(cell_source))
+        else:
+            imports.extend(patterns(ext).findall(content))
+    return list(set(imports))
 
 class LanguageAnalyzer(ABC):
     def __init__(self, path, *extensions):
