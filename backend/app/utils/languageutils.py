@@ -6,9 +6,25 @@ import json
 def patterns(ext):
     match ext:
         case '.py':
-            return re.compile(r'^\s*(?:import|from)\s+(\S+)', re.MULTILINE)
+            return re.compile(r"""
+    ^\s*                                  # Start of line, allowing leading whitespace
+    (?:import|from)\s+                    # 'import' or 'from' keyword followed by whitespace
+    ([\w\.]+)                             # Captures the module name or module path
+    (?:\s+as\s+\w+)?                      # Optionally matches 'as alias'
+    (?:\s*,\s*[\w\.]+(?:\s+as\s+\w+)?)*   # Optionally matches multiple imports separated by commas
+    (?:\s+import\s+[\w\.\(\)\s,]+)?       # Optionally matches 'from module import submodule(s)'
+""", re.VERBOSE | re.MULTILINE)
         case '.dart':
-            return re.compile(r"import\s+'([^']+)'")
+            return re.compile(r"""
+    ^\s*                                  # Start of line, allowing leading whitespace
+    import\s+                             # 'import' keyword followed by whitespace
+    ['"]                                  # Opening quote for the import path
+    ([^'"]+)                              # Captures the import path
+    ['"]                                  # Closing quote for the import path
+    (?:\s+as\s+\w+)?                      # Optionally matches 'as alias'
+    (?:\s+(?:show|hide)\s+[\w\s,]+)?      # Optionally matches 'show' or 'hide' with identifiers
+    \s*;                                  # Ending with a semicolon, allowing trailing whitespace
+""", re.VERBOSE | re.MULTILINE)
         case '.jsx' | '.js' | '.ts' | '.tsx':
             return re.compile(r"""
             ^\s*                                # Start of line, allowing leading whitespace
