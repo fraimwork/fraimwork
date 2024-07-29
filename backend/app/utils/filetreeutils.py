@@ -48,7 +48,12 @@ def build_file_tree_dag(root_path):
             for node in [parent_dir, child_file]:
                 dag.add_node(node, name=os.path.basename(node), path=f'{root_path}\\{node}')
             with open(f'{root_path}/{child_file}', 'r') as f:
-                content = f.read()
+                # check if file is readable
+                try:
+                    content = f.read()
+                except:
+                    content = "*BINARY FILE*"
+                if len(content) == 0: content = "*EMPTY FILE*"
                 dag.nodes[child_file]['content'] = content
             dag.add_edge(parent_dir, child_file)
     return dag
