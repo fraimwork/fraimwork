@@ -5,15 +5,8 @@ import json
 
 def patterns(ext):
     match ext:
-        case '.py':
-            return re.compile(r"""
-    ^\s*                                  # Start of line, allowing leading whitespace
-    (?:import|from)\s+                    # 'import' or 'from' keyword followed by whitespace
-    ([\w\.]+)                             # Captures the module name or module path
-    (?:\s+as\s+\w+)?                      # Optionally matches 'as alias'
-    (?:\s*,\s*[\w\.]+(?:\s+as\s+\w+)?)*   # Optionally matches multiple imports separated by commas
-    (?:\s+import\s+[\w\.\(\)\s,]+)?       # Optionally matches 'from module import submodule(s)'
-""", re.VERBOSE | re.MULTILINE)
+        case '.py', '.ipynb':
+            return re.compile(r'^\s*(import\s+[^#\n]+|from\s+[^#\n]+\s+import\s+[^#\n]+)', re.VERBOSE | re.MULTILINE)
         case '.dart':
             return re.compile(r"""
     ^\s*                                  # Start of line, allowing leading whitespace
@@ -38,6 +31,9 @@ def patterns(ext):
             ([^'"]+)                            # Module specifier
             ['"]                                # Closing quote for module specifier
         """, re.VERBOSE | re.MULTILINE)
+        case ".json":
+            # Match the whole thing
+            return re.compile(r'^\s*"(?:[^"\\]|\\.)*"\s*:\s*"(?:[^"\\]|\\.)*"', re.MULTILINE)
         case _: return None
 
 def get_imports(file_path: str) -> list[str] | NoneType:
@@ -47,15 +43,9 @@ def get_imports(file_path: str) -> list[str] | NoneType:
     imports = []
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
-        if ext == '.ipynb':
-            return None
-            notebook_content = json.load(f)
-            for cell in notebook_content.get('cells', []):
-                if cell.get('cell_type') == 'code':
-                    cell_source = ''.join(cell.get('source', []))
-                    imports.extend(pattern.findall(cell_source))
-        else:
-            imports.extend(patterns(ext).findall(content))
+        imports.extend(patterns(ext).findall(content))
+    # Limit imports length to 50
+    imports = imports[:50]
     return list(set(imports))
 
 class LanguageAnalyzer(ABC):

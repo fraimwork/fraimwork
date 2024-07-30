@@ -24,7 +24,7 @@ def clone_repo(repo_url: str, max_size_mb=100):
     local_repo_path = f'./tmp/{user_name}/{repo_name}'
     if os.path.exists(local_repo_path):
         return git.Repo(local_repo_path)
-    return git.Repo.clone_from(repo_url, local_repo_path)
+    return git.Repo.clone_from(repo_url, local_repo_path, depth=1)
 
 def create_branch(repo, base_name, branch_name):
     repo.git.checkout(base_name)
