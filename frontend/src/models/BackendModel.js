@@ -14,8 +14,8 @@ export const translate = async (repo, source, target) => {
     // Call the Flask backend API to translate the repo
     const data = {
         repo: repo,
+        source: source,
         target: target,
-        source: 'flutter',
     };
     const response = await axios.post(`${API_BASE_URL}/translate`, data).catch(handleError);
     console.log(`Response: ${response.data}`);

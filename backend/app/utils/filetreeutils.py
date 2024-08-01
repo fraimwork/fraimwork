@@ -4,6 +4,7 @@ from functools import lru_cache
 from utils.stringutils import edit_distance
 
 class FileTree(nx.DiGraph):
+    root = '.'
     def get_files(self):
         return [node for node in self.nodes if 'content' in self.nodes[node]]
     
@@ -14,7 +15,27 @@ class FileTree(nx.DiGraph):
         return closest_file
     
     def root_node(self):
-        return '.'
+        return self.root
+    
+    def copy(self, withDepth=10**6):
+        def add_subtree(node, depth):
+            if depth > withDepth:
+                return
+            for successor in self.successors(node):
+                new_tree.add_node(successor, **self.nodes[successor])
+                new_tree.add_edge(node, successor)
+                add_subtree(successor, depth + 1)
+        
+        new_tree = FileTree()
+        new_tree.add_node(self.root_node(), **self.nodes[self.root_node()])
+        add_subtree(self.root_node(), 1)
+        new_tree.root = self.root
+        return new_tree
+    
+    def subfiletree(self, node):
+        file_tree = FileTree(self.subgraph(nx.descendants(self, node) | {node}))
+        file_tree.root = node
+        return file_tree
     
     @staticmethod
     def from_dir(root_path):

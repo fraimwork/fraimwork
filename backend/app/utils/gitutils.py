@@ -1,5 +1,6 @@
 import os, json, requests, git
 from utils.filetreeutils import FileTree
+from utils.frameworkutils import Framework
 
 def get_repo_size(owner, repo):
     url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -25,6 +26,26 @@ def clone_repo(repo_url: str, max_size_mb=100):
     if os.path.exists(local_repo_path):
         return git.Repo(local_repo_path)
     return git.Repo.clone_from(repo_url, local_repo_path, depth=1)
+
+def wipe_repo(repo_path, exceptions=set()):
+    for dir in os.listdir(repo_path):
+        path = os.path.join(repo_path, dir)
+        if os.path.isfile(path):
+            os.remove(path)
+        else:
+            dir_name = os.path.basename(dir)
+            if dir_name == '.git' or dir_name in exceptions: continue
+            if os.listdir(path):
+                wipe_repo(path)
+            os.rmdir(os.path.join(repo_path, dir))
+
+def prepare_repo(repo_path, framework: Framework):
+    working_dir = framework.get_working_dir()
+    if not working_dir:
+        return "Invalid framework"
+    wipe_repo(repo_path)
+    os.makedirs(f'{repo_path}/{working_dir}', exist_ok=True)
+    return f'{repo_path}/{working_dir}'
 
 def create_branch(repo, base_name, branch_name):
     repo.git.checkout(base_name)

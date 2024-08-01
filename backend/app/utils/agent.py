@@ -104,6 +104,9 @@ class Agent:
         for _ in range(3):
             try:
                 response = session.send_message(prompt).text
+                self._log_string("CONTEXT\n")
+                for interaction in custom_context: self._log_interaction(interaction)
+                self._log_string("\n\nINTERACTION\n")
                 self._log_interaction(Interaction(prompt, response, asker))
                 prompt_cost = self.estimate_cost('\n'.join(message['parts'][0] for message in history), prompt, response)
                 self.estimated_total_cost += prompt_cost
@@ -119,6 +122,9 @@ class Agent:
         for _ in range(3):
             try:
                 response = await session.send_message_async(prompt)
+                self._log_string("CONTEXT\n")
+                for interaction in custom_context: self._log_interaction(interaction)
+                self._log_string("\n\nINTERACTION\n")
                 self._log_interaction(Interaction(prompt, response.text, asker))
                 prompt_cost = self.estimate_cost('\n'.join(message['parts'][0] for message in history), prompt, response.text)
                 self.estimated_total_cost += prompt_cost

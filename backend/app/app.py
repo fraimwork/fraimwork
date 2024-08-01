@@ -1,16 +1,15 @@
-import math
-import os, json, shutil, asyncio, networkx as nx
+import datetime, time, math, os, json, shutil, asyncio, networkx as nx
 from flask import Flask, request
 from flask_cors import CORS
-from utils.gitutils import create_pull_request, clone_repo, create_branch
+from utils.gitutils import create_pull_request, clone_repo, create_branch, wipe_repo, prepare_repo
 from utils.agent import Agent, GenerationConfig, Interaction, Team
 from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, markdown_to_dict
 from utils.filetreeutils import FileTree, write_file_tree
-from utils.languageutils import DartAnalyzer
+from utils.listutils import flatten
+from utils.frameworkutils import DartAnalyzer
 from dotenv import load_dotenv
 from utils.graphutils import loose_level_order, collapsed_level_order
-import datetime
-import time
+from utils.frameworkutils import Framework
 
 app = Flask(__name__)
 CORS(app)
@@ -22,46 +21,6 @@ LOCATION = os.getenv('LOCATION')
 MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
-
-extensions_of = {
-    "flutter": [".dart"],
-    "react-native": [".ts, .js, .tsx, .jsx"]
-    # Add more frameworks and their corresponding languages here
-}
-
-ignored_files_of = {
-    "flutter": [],
-    "react-native": []
-    # Add more frameworks and their corresponding ignored files here
-}
-
-def get_working_dir(framework):
-    match framework:
-        case "flutter":
-            return "lib"
-        case "react-native":
-            return "src"
-        case _:
-            return None
-
-def wipe_repo(repo_path, exceptions=set()):
-    for dir in os.listdir(repo_path):
-        if os.path.isfile(os.path.join(repo_path, dir)):
-            os.remove(os.path.join(repo_path, dir))
-        else:
-            dir_name = os.path.basename(dir)
-            if dir_name == ".git" or dir_name in exceptions: continue
-            if os.listdir(os.path.join(repo_path, dir)):
-                wipe_repo(os.path.join(repo_path, dir))
-            os.rmdir(os.path.join(repo_path, dir))
-
-def prepare_repo(repo_path, framework):
-    working_dir = get_working_dir(framework)
-    if not working_dir:
-        return "Invalid framework"
-    wipe_repo(repo_path)
-    os.makedirs(f"{repo_path}/{working_dir}", exist_ok=True)
-    return f'{repo_path}/{working_dir}'
 
 def failed_check_for_params(data, *params):
     for param in params:
@@ -76,8 +35,8 @@ async def translate():
     if error := failed_check_for_params(data, 'repo', 'source', 'target'):
         return error 
     repo_url = data['repo']
-    source = data['source']
-    target = data['target']
+    source = Framework[data['source']]
+    target = Framework[data['target']]
     
     if target == source:
         return "Error: Source and target frameworks must be different", 400
@@ -88,7 +47,7 @@ async def translate():
     created_branch = f"translation-{source}-{target}"
     create_branch(repo, repo.active_branch.name, created_branch)
     local_repo_path = str(repo.working_dir)
-    working_dir_path = f'{local_repo_path}\\{get_working_dir(source)}'
+    working_dir_path = f'{local_repo_path}\\{source.get_working_dir()}'
 
     # Initialize the agent and team
     target_swe = Agent(
@@ -164,10 +123,10 @@ $7 sentence summary of the functionality/contents of the file$'''
     # Create new file tree
     prompt = f'''This is the file tree for the original {source} repo:
     ```
-    {get_working_dir(source)}\\
+    {source.get_working_dir()}\\
     {source_file_tree}
     ```
-    You are tasked with re-structuring the directory to create a file tree for the new react-native repo in the new working directory {get_working_dir(target)}\\. Format your response as follows:
+    You are tasked with re-structuring the directory to create a file tree for the new react-native repo in the new working directory {target.get_working_dir()}\\. Format your response as follows:
     # Summary of Original Repo
     $less than 10 sentence summary of the original repo$
 
@@ -176,33 +135,33 @@ $7 sentence summary of the functionality/contents of the file$'''
 
     # File Tree
     ```
-    {get_working_dir(target)}\\
+    {target.get_working_dir()}\\
     ├── folder1\\
     │   ├── file1.ext
     ├── folder2\\
     │   ├── folder3\\
     │   │   ├── file2.ext
     ```
-    *Only include files of type(s) {extensions_of[target]} in your file tree
+    *Only include files of type(s) {target.get_file_extensions()} in your file tree
 
     # All Correspondances
     $List all the files in the original repo and their corresponding file(s) in the new repo (N/A if no such file(s) exists)$
     ```
-    {get_working_dir(source)}\\path\\to\\{source}\\file1.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file1.ext, {get_working_dir(target)}\\path\\to\\{target}\\file2.ext
-    {get_working_dir(source)}\\path\\to\\{source}\\file2.ext --> {get_working_dir(target)}\\path\\to\\{target}\\file3.ext
-    {get_working_dir(source)}\\path\\to\\{source}\\file_with_no_correspondant.ext --> N/A *do NOT provide a reason if n/a*
-    N/A *do NOT provide a reason if n/a* --> {get_working_dir(target)}\\path\\to\\{target}\\file_with_no_correspondant.ext
+    {source.get_working_dir()}\\path\\to\\{source}\\file1.ext --> {target.get_working_dir()}\\path\\to\\{target}\\file1.ext, {target.get_working_dir()}\\path\\to\\{target}\\file2.ext
+    {source.get_working_dir()}\\path\\to\\{source}\\file2.ext --> {target.get_working_dir()}\\path\\to\\{target}\\file3.ext
+    {source.get_working_dir()}\\path\\to\\{source}\\file_with_no_correspondant.ext --> N/A *do NOT provide a reason if n/a*
+    N/A *do NOT provide a reason if n/a* --> {target.get_working_dir()}\\path\\to\\{target}\\file_with_no_correspondant.ext
     ```
     '''
-    response = team.chat_with_agent('pm', prompt, context_keys=['all'], save_keys=['all'], prompt_title=f"Translate file tree from {source} to {target}:\n```\n{get_working_dir(source)}\\\n{source_file_tree}```")
+    response = team.chat_with_agent('pm', prompt, context_keys=['all'], save_keys=['all'], prompt_title=f"Translate file tree from {source} to {target}:\n```\n{source.get_working_dir()}\\\n{source_file_tree}```")
 
     response_dict = markdown_to_dict(response)
 
-    raw_tree = extract_markdown_blocks(response_dict['file tree'])[0][len(get_working_dir(target)) + 2:]
+    raw_tree = extract_markdown_blocks(response_dict['file tree'])[0][len(target.get_working_dir()) + 2:]
 
     wipe_repo(local_repo_path)
     repo.git.commit(A=True, m="rm past")
-    working_dir_path = f'{local_repo_path}\\{get_working_dir(target)}'
+    working_dir_path = f'{local_repo_path}\\{target.get_working_dir()}'
     write_file_tree(raw_tree, working_dir_path)
     repo.git.commit(A=True, m="A New Hope")
     (target_file_tree := FileTree.from_dir(working_dir_path))
@@ -212,11 +171,11 @@ $7 sentence summary of the functionality/contents of the file$'''
     for correspondence in correspondences:
         source_file, target_files = arr_from_sep_string(correspondence, ' --> ')
         if target_files == "N/A": continue
-        source_file = source_file[len(get_working_dir(source)) + 1:]
+        source_file = source_file[len(source.get_working_dir()) + 1:]
         if not source_file_tree.has_node(source_file): continue
         target_files = arr_from_sep_string(target_files)
         for target_file in target_files:
-            target_file = target_file[len(get_working_dir(target)) + 1:]
+            target_file = target_file[len(target.get_working_dir()) + 1:]
             if not target_file_tree.has_node(target_file): continue
             correspondance_graph.add_edge(source_file, target_file)
 
