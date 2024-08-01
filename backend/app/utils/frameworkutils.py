@@ -12,7 +12,6 @@ class FrameworkAnalyzer(ABC):
     def buildDependencyGraph(self) -> nx.DiGraph:
         pass
 
-
 class DartAnalyzer(FrameworkAnalyzer):
     def __init__(self, path):
         super().__init__(path, '.dart')
@@ -89,6 +88,13 @@ class Framework(Enum):
     REACT_NATIVE = "REACT_NATIVE"
     ANGULAR = "ANGULAR"
     FIREBASE = "FIREBASE"
+    FLASK = "FLASK"
+
+    def __repr__(self) -> str:
+        return self.value
+    
+    def __str__(self) -> str:
+        return self.value
 
     @staticmethod
     def get_frameworks():
@@ -115,6 +121,8 @@ class Framework(Enum):
                 return 'src'
             case Framework.FIREBASE:
                 return 'functions\\src'
+            case Framework.FLASK:
+                return '.'
             case _:
                 return None
     
@@ -124,6 +132,8 @@ class Framework(Enum):
                 return ['.dart']
             case Framework.REACT | Framework.REACT_NATIVE | Framework.ANGULAR | Framework.FIREBASE:
                 return ['.js', '.jsx', '.ts', '.tsx']
+            case Framework.FLASK:
+                return ['.py']
             case _:
                 return []
 
