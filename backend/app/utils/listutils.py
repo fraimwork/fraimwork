@@ -27,3 +27,14 @@ def compact(lst):
     """
 
     return [x for x in lst if x]
+
+def singleton(lst):
+    """Returns the single element of a list, or None if the list is empty.
+
+    Args:
+        lst: The list to check.
+
+    Returns:
+        The single element of the list, or None if the list is empty.
+    """
+    return lst[0] if len(lst) != 1 else None
