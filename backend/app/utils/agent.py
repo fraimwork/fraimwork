@@ -86,6 +86,8 @@ class Agent:
         match self.model_name:
             case "gemini-1.5-flash-001":
                 return (0.35/10**6) * prompt_tokens + (1.05/10**6) * response_tokens
+            case "gemini-1.5-pro-001":
+                return (3.5/10**6) * prompt_tokens + (10.5/10**6) * response_tokens
             case _:
                 return 1
     

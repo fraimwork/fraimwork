@@ -20,9 +20,6 @@ CORS(app)
 
 load_dotenv()  # Load environment variables from .env
 
-PROJECT_ID = os.getenv('PROJECT_ID')
-LOCATION = os.getenv('LOCATION')
-MODEL_NAME = os.getenv('MODEL_NAME')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 API_KEY = os.getenv('API_KEY')
 
@@ -68,7 +65,7 @@ def classify_repo(local_repo_path):
         response = classifier.chat(prompt, custom_context=context)
         # Match the response to the RegEx
         if (m := identify_re.match(response)):
-            framework  = m.group(1).strip()
+            framework = Framework[m.group(1).strip()]
             print(f"{node_dict['name']} is a {framework} project")
             file_tree.nodes[node]['frameworks'] = [framework]
             for node in nx.dfs_tree(file_tree, node).nodes:
@@ -85,7 +82,7 @@ def classify_repo(local_repo_path):
             print(f"Classifier response: {response}")
             return None
     
-    return (root_classification := classify_node(file_tree.root_node()))
+    return classify_node(file_tree.root_node())
 
 
 @app.route('/analyze', methods=['POST'])
@@ -118,6 +115,9 @@ async def translate():
     # Clone the repo and make a new branch
     repo = clone_repo(repo_url)
     base_branch = repo.active_branch.name
+    source = singleton(classify_repo(str(repo.working_dir)))
+    if not source:
+        return "Error: Could not classify the repo", 400
     created_branch = f"translation-{source}-{target}"
     create_branch(repo, repo.active_branch.name, created_branch)
     local_repo_path = str(repo.working_dir)
@@ -185,14 +185,6 @@ $7 sentence summary of the functionality/contents of the file$
     for level in eval_order:
         await summarize_group(level)
         time.sleep(0.5)
-
-    curr_string = '\n'.join([message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict()])
-    (curr_tokens := pm.model.count_tokens(curr_string).total_tokens)
-
-    would_be_string = '\n'.join([source_file_tree.nodes[node]['content'] for node in source_dependency_graph.nodes])
-    (would_be_tokens := pm.model.count_tokens(would_be_string).total_tokens)
-
-    (percent_tokens_reduction := 1 - (curr_tokens / would_be_tokens))
 
     # Create new file tree
     prompt = f'''This is the file tree for the original {source} repo:
@@ -365,7 +357,7 @@ $Example usage$
 async def modify():
     data = json.loads(request.data)
     if error := failed_check_for_params(data, 'repo'):
-        return error
+        return error, 400
     repo_url = data['repo']
     feature = f"""# Name: Organizations
     # Description: Organizations are a way to group users together. They can be used to automatically share events with the members of the organization whenever they are uploaded to the cloud. \
@@ -434,7 +426,7 @@ $7 sentence summary of the functionality/contents of the file$
         for i, response in enumerate(responses):
             source_file_tree.nodes[group[i]]["summary"] = response
 
-    for level in tqdm(eval_order):
+    for level in eval_order:
         await summarize_group(level)
         time.sleep(0.5)
 
@@ -526,7 +518,7 @@ Here is a sample response:
 Respond in the following format:
 # Old Code Snippet
 ```
-$old code snippet to be changed (this string must match exactly with a substring of the original content) (no filler comments etc.)$
+$old code snippet TO BE CHANGED$
 ```
 # New Code Snippet
 ```

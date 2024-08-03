@@ -72,7 +72,40 @@ def markdown_to_dict(markdown: str) -> dict:
     
     return dict(result)
 
-def edit_distance(a: str, b: str):
+import re
+
+def wordwise_tokenize(text):
+    """Tokenizes a sequence into words and whitespace, excluding leading/trailing non-alphanumerics.
+
+    Args:
+        text: The input text string.
+
+    Returns:
+        A list of tokens.
+    """
+
+    # Remove leading and trailing non-alphanumeric characters
+    text = re.sub(r"^\W+|\W+$", "", text)
+
+    # Split the text into words and whitespace
+    tokens = re.findall(r'\w+|\s+|[^\w\s]', text)
+
+    return tokens
+
+def linewise_tokenize(text):
+    """Tokenizes a sequence into lines and \n.
+
+    Args:
+        text: The input text string.
+
+    Returns:
+        A list of tokens.
+    """
+    # Split the text into lines and newlines
+    tokens = re.split(r'(\n)', text)
+    return tokens
+
+def string_edit_distance(a: str, b: str):
     """
     Compute the Levenshtein distance between two strings.
 
@@ -97,5 +130,116 @@ def edit_distance(a: str, b: str):
                 dp[i][j] = dp[i - 1][j - 1]
             else:
                 dp[i][j] = 1 + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-    
     return dp[m][n]
+
+raw_list_cache = {}
+
+def raw_list_edit_distance(a: list, b: list):
+    """
+    Compute the Levenshtein distance between two lists.
+
+    Parameters:
+    a (list): The first list.
+    b (list): The second list.
+
+    Returns:
+    int: The Levenshtein distance between the two lists.
+    """
+    global raw_list_cache
+    if (tuple(a), tuple(b)) in raw_list_cache:
+        return raw_list_cache[(tuple(a), tuple(b))]
+    m, n = len(a), len(b)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+    
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            length = max(len(a[i-1]), len(b[j-1]))
+            if length == 0:
+                dp[i][j] = 0
+                continue
+            if a[i - 1] == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = length + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    raw_list_cache[(tuple(a), tuple(b))] = dp[m][n]
+    return dp[m][n]
+
+weighted_list_cache = {}
+
+def weighted_list_edit_distance(a: list, b: list, a_tokens=None, b_tokens=None):
+    """
+    Compute the Levenshtein distance between two lists.
+
+    Parameters:
+    a (list): The first list.
+    b (list): The second list.
+
+    Returns:
+    int: The Levenshtein distance between the two lists.
+    """
+    global weighted_list_cache
+    if a_tokens is None or b_tokens is None:
+        a_tokens = [wordwise_tokenize(line) for line in a]
+        b_tokens = [wordwise_tokenize(line) for line in b]
+    if (tuple(a), tuple(b)) in weighted_list_cache:
+        return weighted_list_cache[(tuple(a), tuple(b))]
+    m, n = len(a), len(b)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+    
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            length = max(len(a[i-1]), len(b[j-1]))
+            if length == 0:
+                dp[i][j] = 0
+                continue
+            if a[i - 1] == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                # dp[i][j] = length + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+                dist = raw_list_edit_distance(a_tokens[i-1], b_tokens[j-1])
+                dif = dist / length
+                dp[i][j] = dif + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    weighted_list_cache[(tuple(a), tuple(b))] = dp[m][n]
+    return dp[m][n]
+
+def closest_substr(main, sub):
+    """
+    Finds the closest substring in 'main' to 'sub' based on Levenshtein distance.
+
+    Args:
+        main: The main string to search within.
+        sub: The substring to find the closest match for.
+
+    Returns:
+        The closest substring found in 'main'.
+    """
+    a = [line for line in linewise_tokenize(main)]
+    b = [line for line in linewise_tokenize(sub)]
+
+    a_tokens = [wordwise_tokenize(line) for line in a]
+    b_tokens = [wordwise_tokenize(line) for line in b]
+    if len(b) > len(a):
+        return main
+
+    min_distance = len(b)
+    closest_substr = ""
+
+    for i in range(len(a) - len(b) + 1):
+        current_substr = a[i : i + len(b)]
+        current_substr_tokens = a_tokens[i : i + len(b)]
+        distance = weighted_list_edit_distance(current_substr, b, current_substr_tokens, b_tokens)
+        if distance < min_distance:
+            min_distance = distance
+            closest_substr = current_substr
+
+    return ''.join(closest_substr), min_distance

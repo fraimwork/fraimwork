@@ -5,4 +5,3 @@ google-generativeai
 python-dotenv
 gitpython
 networkx
-time
