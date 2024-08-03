@@ -73,8 +73,6 @@ def markdown_to_dict(markdown: str) -> dict:
     
     return dict(result)
 
-import re
-
 def wordwise_tokenize(text):
     """Tokenizes a sequence into words and whitespace
 
@@ -183,8 +181,107 @@ def smith_waterman_tokens(key, query, match_score=3, mismatch_penalty=-3, gap_pe
 
     return align1, align2, max_score, scoring_matrix
 
-def find_most_similar_substring(corpus, query, match_score=3, mismatch_penalty=-3, gap_penalty=-1):
+def find_most_similar_substring_naive(corpus, query, match_score=3, mismatch_penalty=-3, gap_penalty=-1):
     corpus_tokens = linewise_tokenize(corpus)
     query_tokens = linewise_tokenize(query)
     corpus_align, query_align, max_score, _= smith_waterman_tokens(corpus_tokens, query_tokens, match_score, mismatch_penalty, gap_penalty, processing=lambda x: x.lower().strip())
     return ''.join(corpus_align), max_score
+
+
+db_kmers_cache = {}
+
+def ktuple_matching(query, database, k):
+    global db_kmers_cache
+    if (''.join(database), k) in db_kmers_cache:
+        database_kmers = db_kmers_cache[(''.join(database), k)]
+    else:
+        database_kmers = {}
+        for i in range(len(database) - k + 1):
+            kmer = ''.join(part.strip() for part in database[i:i+k])
+            if kmer in database_kmers:
+                database_kmers[kmer].append(i)
+            else:
+                database_kmers[kmer] = [i]
+        db_kmers_cache[(''.join(database), k)] = database_kmers
+    
+    matches = []
+    for i in range(len(query) - k + 1):
+        kmer = ''.join(part.strip() for part in query[i:i+k])
+        if kmer in database_kmers:
+            for db_pos in database_kmers[kmer]:
+                matches.append((i, db_pos))
+    
+    return matches
+
+def find_top_n_diagonals(matches, n):
+    diagonal_scores = {}
+    for q_pos, db_pos in matches:
+        diag = q_pos - db_pos
+        if diag in diagonal_scores:
+            diagonal_scores[diag] += 1
+        else:
+            diagonal_scores[diag] = 1
+    
+    sorted_diagonals = sorted(diagonal_scores.items(), key=lambda item: item[1], reverse=True)
+    top_diagonals = [diag for diag, score in sorted_diagonals[:n]]
+    
+    return top_diagonals
+
+def banded_dp(query, database, band_width, top_diagonals, match_score=3, mismatch_penalty=3, gap_penalty=1, processing=None):
+    best_score = float('-inf')
+    best_alignment = None
+    
+    for diag in top_diagonals:
+        q_start = max(0, diag)
+        db_start = max(0, -diag)
+        q_end = min(len(query), len(database) + diag)
+        db_end = min(len(database), len(query) - diag)
+        
+        dp = np.zeros((q_end - q_start + 1, db_end - db_start + 1))
+        
+        for i in range(1, q_end - q_start + 1):
+            for j in range(max(1, i - band_width), min(db_end - db_start + 1, i + band_width)):
+                q, d = query[q_start + i - 1], database[db_start + j - 1]
+                if processing:
+                    q = processing(q)
+                    d = processing(d)
+                multiplier = 1 + len(max(q, d, key=len))
+                match = dp[i-1, j-1] + (match_score if q == d else -mismatch_penalty) * multiplier
+                delete = dp[i-1, j] - gap_penalty * multiplier
+                insert = dp[i, j-1] - gap_penalty * multiplier
+                dp[i, j] = max(match, delete, insert)
+        
+        if dp[-1, -1] > best_score:
+            best_score = dp[-1, -1]
+            best_alignment = (q_start, db_start, q_end, db_end)
+    
+    return best_alignment, best_score
+
+def fasta_algorithm(database, query, k=12, n=3, band_width=10, match_score=3, mismatch_penalty=3, gap_penalty=1):
+    matches = ktuple_matching(query, database, k)
+    top_diagonals = find_top_n_diagonals(matches, n)
+    best_alignment, best_score = banded_dp(query, database, band_width, top_diagonals, match_score, mismatch_penalty, gap_penalty, processing=lambda x: x.lower().strip())
+    if best_alignment is None:
+        return None, float('-inf')
+    q_start, db_start, q_end, db_end = best_alignment
+    best_substring = database[db_start:db_end]
+    
+    return best_substring, best_score
+
+def find_most_similar_substring(corpus, query):
+    # 1. Tokenize the corpus and query into lines
+    linewise_tokenized_corpus = linewise_tokenize(corpus)
+    linewise_tokenized_substring = linewise_tokenize(query)
+
+    # 2. Run the FASTA algorithm
+    result, score = fasta_algorithm(linewise_tokenized_corpus, linewise_tokenized_substring, k=3, n=2, band_width=5, gap_penalty=0)
+    if result is None:
+        return None, float('-inf')
+
+    # 3. Do a second pass with wordwise tokeization
+    wordwise_tokenized_result = wordwise_tokenize(''.join(result))
+    wordwise_tokenized_query = wordwise_tokenize(query)
+    result, score = fasta_algorithm(wordwise_tokenized_result, wordwise_tokenized_query, k=3, n=3, band_width=3, match_score=2, mismatch_penalty=3, gap_penalty=5)
+    if result is None:
+        return None, float('-inf')
+    return ''.join(result), score
