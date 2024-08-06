@@ -3,7 +3,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from utils.gitutils import create_pull_request, clone_repo, create_branch, wipe_repo, prepare_repo
 from utils.agent import Agent, GenerationConfig, Interaction, Team
-from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, markdown_to_dict
+from utils.stringutils import arr_from_sep_string, extract_markdown_blocks, markdown_to_dict, find_most_similar_substring
 from utils.filetreeutils import FileTree, write_file_tree
 from utils.frameworkutils import DartAnalyzer
 from dotenv import load_dotenv
@@ -382,10 +382,13 @@ async def modify():
         name="source_swe_analyzer",
         generation_config=GenerationConfig(temperature=0.7),
         system_prompt=f'''You are a {source} software engineer. Your job is to summarize the functionality of provided code files. Structure your response as follows:
+
 # filename.ext:
+
 $7 sentence summary of the functionality/contents of the file$
 '''
     )
+
     pm = Agent(
         model_name="gemini-1.5-pro-001",
         api_key=API_KEY,
@@ -393,19 +396,27 @@ $7 sentence summary of the functionality/contents of the file$
         generation_config=GenerationConfig(temperature=0.3),
         system_prompt=f"""You are a high-level technical project manager tasked with the project of adding functionality to a {source} repository."""
     )
+
     source_swe_coder = Agent(
         model_name="gemini-1.5-flash-001",
         api_key=API_KEY,
         name="source_swe_coder",
-        generation_config=GenerationConfig(temperature=0.7),
+        generation_config=GenerationConfig(temperature=0.5),
         system_prompt=f"You are a {source} software engineer. Your job is to write code to implement a specific feature. Respond with code and nothing else. No explanations needed."
     )
+
     team = Team(source_swe_summarizer, pm, source_swe_coder)
+
     analyzer = source.get_analyzer(working_dir_path)
+
     source_dependency_graph = analyzer.buildDependencyGraph()
 
     # loose level order
     eval_order = loose_level_order(source_dependency_graph)[::-1]
+    for level in eval_order:
+        print(level)
+    print(f"Number of levels: {len(eval_order)}")
+
     (source_file_tree := FileTree.from_dir(working_dir_path))
 
     # Summarize the original repo
@@ -431,19 +442,19 @@ $7 sentence summary of the functionality/contents of the file$
         time.sleep(0.5)
 
     prompt = f"""This is the file tree for the original {source} repo:
-    ```
-    {source.get_working_dir()}\\
-    {source_file_tree}
-    ```
-    Given the prior context, summarize the functionality of the entire repository succinctly.
-    """
+```
+{source.get_working_dir()}\\
+{source_file_tree}
+```
+Given the prior context, summarize the functionality of the entire repository succinctly.
+"""
     print(team.chat_with_agent('source_swe_analyzer', prompt, context_keys=["all"], save_keys=["all"], prompt_title=f"""Repository Summary.
-    File Tree provided:
-    ```
-    {source.get_working_dir()}\\
-    {source_file_tree}
-    ```
-    """))
+File Tree provided:
+```
+{source.get_working_dir()}\\
+{source_file_tree}
+```
+"""))
 
     curr_string = '\n'.join([message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict()])
     (curr_tokens := pm.model.count_tokens(curr_string).total_tokens)
@@ -455,41 +466,59 @@ $7 sentence summary of the functionality/contents of the file$
 
     response_format = f"""
 You may choose ACTIONS from the following list:
-- WRITE | $FILE_PATH$ | $PROMPT$ (PROMPT should inform how the new FILE_PATH should be written)
-- EDIT | $FILE_PATH$ | $PROMPT$ (Edit the provided file to fulfill the prompt)
-- DELETE | $FILE_PATH$ (Delete the provided file)
+- | WRITE | $FILE_PATH$ | $PROMPT$ (PROMPT should be a brief instruction for how the new FILE_PATH should be WRITTEN)
+- | EDIT | $FILE_PATH$ | $PROMPT$ (PROMPT should be a brief instruction for how the FILE_PATH should be EDITED)
+- | DELETE | $FILE_PATH$ (Delete the provided file)
 ----------
 Here is a sample response:
 ```
-1. WRITE | {source.get_working_dir()}\\path\\to\\newfile.ext | Implement ... with the following properties:
+| WRITE | {source.get_working_dir()}\\path\\to\\newfile.ext | Implement ... with the following properties:
     - property1
     - property2
-2. EDIT | {source.get_working_dir()}\\path\\to\\file.ext | Fix the bug ... by doing:
+    - dependency1
+    - dependency2
+| EDIT | {source.get_working_dir()}\\path\\to\\file.ext | Fix the bug ... by doing:
     - step1
     - step2
-3. DELETE | {source.get_working_dir()}\\path\\to\\some\\file.ext | Reasons for deletion:
+| DELETE | {source.get_working_dir()}\\path\\to\\some\\file.ext | Reasons for deletion:
     - reason1
     - reason2
 ```
+It is VERY important that you only respond with a high level overview of what to do. The actual implementation will be done by the coder.
 """
 
     # Create new file tree
     prompt = f'''
-    You are to build the following feature:
-    {feature}
-    ------------------
-    {response_format}
-    ------------------
-    You need to follow the response template structure exactly or the response will not be accepted.
-    '''
+You are to build the following feature:
+{feature}
+------------------
+{response_format}
+------------------
+You need to follow the response template structure exactly (MY JOB DEPENDS ON IT)
+'''
     print(response := team.chat_with_agent("pm", prompt, context_keys=["all"], save_keys=["all"], prompt_title="Feature Creation Steps"))
 
-    pattern  = re.compile(r'^\d+\.\s*((?:.*\n?)*?(?=\n\d+\.|\Z))', re.MULTILINE)
     md = extract_markdown_blocks(response)[0]
-    lines = pattern.findall(md)
-    actions = [(action[0].strip(), action[1].strip()[len(source.get_working_dir()) + 1:], action[2].strip()) for line in lines if (action := line.split('|'))]
+    blocks = md.split("|")
+    actions = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i].strip()
+        if block != "WRITE" and block != "EDIT" and block != "DELETE":
+            i += 1
+            continue
+        action, file, prompt = blocks[i:i + 3]
+        action = action.strip()
+        if file.strip().startswith(source.get_working_dir()):
+            file = file.strip()[len(source.get_working_dir()) + 1:]
+        else:
+            file = file.strip()
+        prompt = prompt.strip()
+        actions.append((action, file, prompt))
+        i += 3
     for action in actions:
         print(action)
+
     source_swe_coder.model.count_tokens('\n'.join(message['parts'][0] for interaction in team.context_threads['all'] for message in interaction.to_dict())).total_tokens
 
     # Cache the context threads
@@ -500,10 +529,8 @@ Here is a sample response:
     thread *= factor
     source_swe_coder.model.count_tokens('\n'.join(message['parts'][0] for interaction in thread for message in interaction.to_dict())).total_tokens
 
-    source_swe_coder.cache_context(thread, ttl=datetime.timedelta(minutes=8))
-
     def write(file_path, prompt):
-        response = source_swe_coder.chat(prompt)
+        response = source_swe_coder.chat(f"Instructions for {file_path}:\n{prompt}")
         md = extract_markdown_blocks(response)[0]
         path = f"{working_dir_path}\\{file_path}"
         if not os.path.exists(os.path.dirname(path)):
@@ -515,29 +542,61 @@ Here is a sample response:
         with open(f"{working_dir_path}\\{file_path}", 'r') as f:
             content = f.read()
         response = source_swe_coder.chat(f"""{prompt}
-Respond in the following format:
-# Old Code Snippet
+We will solve this problem by dividing the edit into smaller sub-edits. Structure your response as follows:
+# Step 1
+$Brief description of the first sub-change$
+## Short Old Code Snippet 1
 ```
-$old code snippet TO BE CHANGED$
+$short old code snippet that needs to changed$
 ```
-# New Code Snippet
+## New Code Snippet 1
 ```
-$the code snippet the prompt is asking for$
-```""", custom_context=[Interaction(f"Contents of {file_path}", content)])
-        old_code, new_code = extract_markdown_blocks(response)
-        with open(f'{working_dir_path}\\{file_path}', 'w') as f:
-            f.write(content.replace(old_code, new_code))
+$the new code snippet needed to fulfill the prompt$
+```
+------------------
+...
+...
+------------------
+# Step N
+$Brief description of the Nth sub-change$
+## Short Old Code Snippet N
+```
+$...$
+```
+## New Code Snippet N
+```
+$...$
+```.
+I have a very advanced algorithm to find the closest match to the old code snippet, so you only need to provide a FEW lines (around 10 lines) of padding context around the old code snippet.
+MAKE SURE THAT EACH SNIPPET IS SHORT (MY JOB DEPENDS ON IT).
+Additionally, DO NOT RESPOND WITH A DIFF FILE OR IN A DIFFERENT FORMAT, MY JOB ALSO DEPENDS ON IT""", custom_context=[Interaction(f"Contents of {file_path}", content)])
+        blocks = extract_markdown_blocks(response)
+        # even blocks are old code, odd blocks are new code
+        old_codes = [block for i, block in enumerate(blocks) if i % 2 == 0]
+        new_codes = [block for i, block in enumerate(blocks) if i % 2 == 1]
+        closest_matches = [find_most_similar_substring(content, old_code)[0] for old_code in old_codes]
+        for closest_match, new_code in zip(closest_matches, new_codes):
+            if closest_match is None: continue
+            content = content.replace(closest_match, new_code)
+            with open(f'{working_dir_path}\\{file_path}', 'w') as f:
+                f.seek(0)
+                f.truncate()
+                f.write(content)
 
     def delete(file_path):
         os.remove(f"{working_dir_path}\\{file_path}")
 
-    for action, file, prompt in actions:
+    from utils.errorutils import repeat_until_finish
+    from tqdm import tqdm
+
+    for i in tqdm(range(len(actions))):
+        action, file, prompt = actions[i]
         if action == 'WRITE':
             repeat_until_finish(lambda: write(file, prompt), max_retries=2)
-        elif action == 'DELETE':
-            delete(file)
         elif action == 'EDIT':
             repeat_until_finish(lambda: edit(file, prompt), max_retries=2)
+        elif action == 'DELETE':
+            delete(file)
 
 
 if __name__ == '__main__':

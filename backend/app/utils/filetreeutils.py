@@ -1,7 +1,7 @@
 import networkx as nx
 import os
 from functools import lru_cache
-from utils.stringutils import string_edit_distance
+from utils.stringutils import edit_distance
 
 class FileTree(nx.DiGraph):
     root = '.'
@@ -11,7 +11,7 @@ class FileTree(nx.DiGraph):
     def get_closest_file_name(self, file_name):
         files = self.get_files()
         # closest file by edit distance
-        closest_file = min(files, key=lambda x: string_edit_distance(x, file_name))
+        closest_file = min(files, key=lambda x: edit_distance(x, file_name))
         return closest_file
     
     def root_node(self):
