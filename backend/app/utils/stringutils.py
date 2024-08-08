@@ -1,4 +1,4 @@
-import re
+import re, difflib
 from collections import defaultdict
 import numpy as np
 from functools import lru_cache
@@ -69,7 +69,7 @@ def wordwise_tokenize(text):
 
     return tokens
 
-def linewise_tokenize(text):
+def linewise_tokenize(text: str):
     """Tokenizes a sequence into lines and \n.
 
     Args:
@@ -79,8 +79,7 @@ def linewise_tokenize(text):
         A list of tokens.
     """
     # Split the text into lines and newlines
-    tokens = [token for token in re.split(r'(\n)', text) if token != '']
-    return tokens
+    return text.splitlines(keepends=True)
 
 @lru_cache(maxsize=None)
 def _edit_distance(str1, str2):
@@ -192,6 +191,9 @@ def score(a, b):
     diff = edit_distance(a, b)
     return 1 - (diff / max_len)
 
+def weighted_score(a, b):
+    return score(a, b) * np.mean([len(a), len(b)])
+
 db_kmers_cache = {}
 
 def ktuple_matching(query, database, k, part_processing=None):
@@ -211,6 +213,7 @@ def ktuple_matching(query, database, k, part_processing=None):
     matches = []
     for i in range(len(query) - k + 1):
         kmer = ''.join(part_processing(part) for part in query[i:i+k])
+        if ''.join(kmer) == '': continue
         if kmer in database_kmers:
             for db_pos in database_kmers[kmer]:
                 matches.append((i, db_pos))
@@ -220,8 +223,8 @@ def find_top_diagonal(matches, query, database, k):
     diagonal_scores = defaultdict(int)
     for q_pos, db_pos in matches:
         diag = q_pos - db_pos
-        diagonal_scores[diag] += np.mean([score(q, db) for q, db in zip(query[q_pos:q_pos+k], database[db_pos:db_pos+k])])
-    top_diagonal = max(diagonal_scores.items(), key=lambda item: item[1], default=(0, 0))
+        diagonal_scores[diag] += np.mean([weighted_score(q, db) for q, db in zip(query[q_pos:q_pos+k], database[db_pos:db_pos+k])])
+    top_diagonal = max(diagonal_scores.items(), key=lambda item: item[1], default=(None, 0))
     return top_diagonal[0]
 
 def smith_waterman_diagonal(
@@ -231,7 +234,7 @@ def smith_waterman_diagonal(
         mismatch_penalty=3,
         gap_penalty=2,
         processing=None,
-        tolerance=0.7,
+        tolerance=0.75,
         diag=0,
         band_width=5,
         db_token_depth_roc=None,
@@ -256,7 +259,7 @@ def smith_waterman_diagonal(
         for offset in range(-band_width, band_width + 1):
             row = start_row
             col = start_col + offset
-            if not (0 <= row <= m and 0 <= col <= n):
+            if not (0 < row <= m and 0 < col <= n):
                 continue
             q, d = query[row-1], database[col-1]
             covered.append((row - 1, col - 1))
@@ -266,7 +269,7 @@ def smith_waterman_diagonal(
             match = scoring_matrix[(row-1, col-1)] + (match_score if score(q, d) >= tolerance else -mismatch_penalty) * multiplier
             delete = scoring_matrix[(row-1, col)] - gap_penalty * multiplier
             insert = scoring_matrix[(row, col-1)] - gap_penalty * multiplier
-            scoring_matrix[(row, col)] = max(0, match, delete, insert)
+            scoring_matrix[(row, col)] = max(match, insert)
 
             if scoring_matrix[(row, col)] == match:
                 traceback_matrix[(row, col)] = 1
@@ -293,7 +296,7 @@ def smith_waterman_diagonal(
             j -= 1
         elif traceback_matrix[(i, j)] == 2:
             align1.insert(0, q)
-            # align2.insert(0, '-')
+            align2.insert(0, d)
             i -= 1
         elif traceback_matrix[(i, j)] == 3:
             align2.insert(0, d)
@@ -304,6 +307,7 @@ def smith_waterman_diagonal(
 def fasta_algorithm(database, query, k=4, n=3, band_width=5, match_score=3, mismatch_penalty=3, gap_penalty=1, match_processing=None, dp_processing=None, db_token_depth_roc=None, query_token_depth_roc=None):
     matches = ktuple_matching(query, database, k, match_processing)
     top_diagonal = find_top_diagonal(matches, query, database, k)
+    if top_diagonal is None: return None, float('-inf')
     best_alignment, best_score, covered = smith_waterman_diagonal(
         query,
         database,
@@ -318,24 +322,39 @@ def fasta_algorithm(database, query, k=4, n=3, band_width=5, match_score=3, mism
     )
     if best_alignment is None:
         return None, float('-inf')
-    
     return best_alignment, best_score
 
 def find_most_similar_substring(query, database):
-    # 1. Tokenize the corpus and query into lines
-    worwise_tokenized_database = wordwise_tokenize(database)
+    # 1. Tokenize the corpus and query
+    linewise_tokenized_database = linewise_tokenize(database)
+    linewise_tokenized_query = linewise_tokenize(query)
+
+    result, score = fasta_algorithm(
+        linewise_tokenized_database,
+        linewise_tokenized_query,
+        k=1,
+        n=1,
+        band_width=10,
+        match_score=3,
+        mismatch_penalty=3,
+        gap_penalty=0.1,
+        match_processing=lambda x: x.strip().replace(' ', ''),
+        dp_processing=lambda x: wordwise_tokenize(x.strip().replace(' ', '')),
+    )
+
+    worwise_tokenized_database = wordwise_tokenize(''.join(result)) if result is not None else wordwise_tokenize(database)
     wordwise_tokenized_query = wordwise_tokenize(query)
 
     # 2. Run the FASTA algorithm
     result, score = fasta_algorithm(
         worwise_tokenized_database,
         wordwise_tokenized_query,
-        k=min(7, len(wordwise_tokenized_query)),
+        k=max(1, min(3, len(wordwise_tokenized_query) - 1, len(worwise_tokenized_database) - 1)),
         n=1,
-        band_width=3,
-        match_score=6,
-        mismatch_penalty=6,
-        gap_penalty=0.15,
+        band_width=30,
+        match_score=5,
+        mismatch_penalty=3,
+        gap_penalty=0.3,
         match_processing=lambda x: x.strip(),
         dp_processing=lambda x: x.strip(),
     )
@@ -343,6 +362,41 @@ def find_most_similar_substring(query, database):
     if result is None:
         return None, float('-inf')
     return ''.join(result), score
+
+def get_diffs(a, b):
+    diffs = [diff for diff in difflib.ndiff(a.splitlines(), b.splitlines())]
+    diffs_groups = []
+    current_group = []
+    for diff in diffs:
+        if diff.startswith(' '):
+            if current_group:
+                diffs_groups.append(current_group)
+                current_group = []
+        elif diff.startswith('-') or diff.startswith('+'):
+            current_group.append(diff)
+    diffs = []
+    for group in diffs_groups:
+        # Turn group into an array of tuples (find, replace)
+        find = '\n'.join([line[1:] for line in group if line.startswith('-')])
+        replace = '\n'.join([line[1:] for line in group if line.startswith('+')])
+        diffs.append((find, replace))
+    return diffs
+
+def skwonk(database: str, old, new):
+    # 1. Zone in on the string we are going to be editing
+    zone, _ = find_most_similar_substring(old, database)
+    if not zone: return database
+
+    # 2. Get the diffs between the old and new substring
+    diffs = get_diffs(old, new)
+
+    # 3. Find and replace
+    for find, replace in diffs:
+        fuzzy_find, _ = find_most_similar_substring(find, zone)
+        if not fuzzy_find: continue
+        database = database.replace(fuzzy_find, replace, 1)
+    
+    return database
 
 def find_most_similar_file_name(files, query):
     return max(
