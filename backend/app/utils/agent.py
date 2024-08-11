@@ -84,9 +84,9 @@ class Agent:
         prompt_tokens = self.model.count_tokens(context + prompt).total_tokens
         response_tokens = self.model.count_tokens(response).total_tokens
         match self.model_name:
-            case "gemini-1.5-flash-001":
+            case "gemini-1.5-flash-001" | "gemini-1.5-flash":
                 return (0.35/10**6) * prompt_tokens + (1.05/10**6) * response_tokens
-            case "gemini-1.5-pro-001":
+            case "gemini-1.5-pro-001" | "gemini-1.5-pro":
                 return (3.5/10**6) * prompt_tokens + (10.5/10**6) * response_tokens
             case _:
                 return 1

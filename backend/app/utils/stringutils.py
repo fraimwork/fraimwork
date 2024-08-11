@@ -410,7 +410,7 @@ def parse_diff(diff_string):
     return merged_groups
 
 def skwonk(database: str, diff: str):
-    original = '\n'.join([line for line in diff.splitlines() if not line.startswith('+')])
+    original = ''.join([line for line in diff.splitlines(keepends=True) if not line.startswith('+')])
     # 1. Zone in on the string we are going to be editing
     zone, _ = fuzzy_find(original, database)
     original_zone = zone
