@@ -242,8 +242,7 @@ def smith_waterman_diagonal(
     ):
     m, n = len(query), len(database)
     
-    scoring_matrix = defaultdict(int)
-    traceback_matrix = defaultdict(int)
+    scoring_matrix, traceback_matrix = defaultdict(int), defaultdict(int)
     if diag >= 0:
         start_row = 1
         start_col = -diag
@@ -251,30 +250,24 @@ def smith_waterman_diagonal(
         start_row = diag
         start_col = 1
 
-
     max_score = 0
     max_pos = (0, 0)
     covered = []
     while start_row <= m and start_col <= n:
         for offset in range(-band_width, band_width + 1):
-            row = start_row
-            col = start_col + offset
-            if not (0 < row <= m and 0 < col <= n):
-                continue
+            row, col = start_row, start_col + offset
+            if not (0 < row <= m and 0 < col <= n): continue
             q, d = query[row-1], database[col-1]
             covered.append((row - 1, col - 1))
             if processing:
                 q, d = processing(q), processing(d)
             multiplier = 1 + np.mean([len(q), len(d)]) / 2
             match = scoring_matrix[(row-1, col-1)] + (match_score if score(q, d) >= tolerance else -mismatch_penalty) * multiplier
-            delete = scoring_matrix[(row-1, col)] - gap_penalty * multiplier
             insert = scoring_matrix[(row, col-1)] - gap_penalty * multiplier
             scoring_matrix[(row, col)] = max(match, insert)
 
             if scoring_matrix[(row, col)] == match:
                 traceback_matrix[(row, col)] = 1
-            elif scoring_matrix[(row, col)] == delete:
-                traceback_matrix[(row, col)] = 2
             elif scoring_matrix[(row, col)] == insert:
                 traceback_matrix[(row, col)] = 3
             
@@ -294,10 +287,6 @@ def smith_waterman_diagonal(
             align2.insert(0, d)
             i -= 1
             j -= 1
-        elif traceback_matrix[(i, j)] == 2:
-            align1.insert(0, q)
-            align2.insert(0, d)
-            i -= 1
         elif traceback_matrix[(i, j)] == 3:
             align2.insert(0, d)
             align1.insert(0, '-')
@@ -324,8 +313,8 @@ def fasta_algorithm(database, query, k=4, n=3, band_width=5, match_score=3, mism
         return None, float('-inf')
     return best_alignment, best_score
 
-def find_most_similar_substring(query, database):
-    # 1. Tokenize the corpus and query
+def fuzzy_find(query, database):
+    # 1. First pass with linewise tokenization
     linewise_tokenized_database = linewise_tokenize(database)
     linewise_tokenized_query = linewise_tokenize(query)
 
@@ -342,16 +331,16 @@ def find_most_similar_substring(query, database):
         dp_processing=lambda x: wordwise_tokenize(x.strip().replace(' ', '')),
     )
 
+    # 2. Second pass with wordwise tokenization
     worwise_tokenized_database = wordwise_tokenize(''.join(result)) if result is not None else wordwise_tokenize(database)
     wordwise_tokenized_query = wordwise_tokenize(query)
 
-    # 2. Run the FASTA algorithm
     result, score = fasta_algorithm(
         worwise_tokenized_database,
         wordwise_tokenized_query,
         k=max(1, min(3, len(wordwise_tokenized_query) - 1, len(worwise_tokenized_database) - 1)),
         n=1,
-        band_width=30,
+        band_width=18,
         match_score=5,
         mismatch_penalty=3,
         gap_penalty=0.3,
@@ -382,20 +371,74 @@ def get_diffs(a, b):
         diffs.append((find, replace))
     return diffs
 
-def skwonk(database: str, old, new):
-    # 1. Zone in on the string we are going to be editing
-    zone, _ = find_most_similar_substring(old, database)
-    if not zone: return database
+def parse_diff(diff_string):
+    lines = diff_string.splitlines()
+    groups = []
+    current_group = []
+    in_edit = False
 
-    # 2. Get the diffs between the old and new substring
-    diffs = get_diffs(old, new)
-
-    # 3. Find and replace
-    for find, replace in diffs:
-        fuzzy_find, _ = find_most_similar_substring(find, zone)
-        if not fuzzy_find: continue
-        database = database.replace(fuzzy_find, replace, 1)
+    for line in lines:
+        if line.startswith('+') or line.startswith('-'):
+            if not in_edit and current_group:
+                groups.append(current_group)
+                current_group = []
+            current_group.append(line)
+            in_edit = True
+        else:
+            if in_edit and current_group:
+                groups.append(current_group)
+                current_group = []
+            current_group.append(line)
+            in_edit = False
     
+    if current_group:
+        groups.append(current_group)
+    
+    merged_groups = []
+    for group in groups:
+        if not (group[0].startswith('+') or group[0].startswith('-')):
+            merged_groups.append('\n'.join(group))
+        else:
+            delete, insert = '', ''
+            for line in group:
+                if line.startswith('-'):
+                    delete += line[1:] + '\n'
+                elif line.startswith('+'):
+                    insert += line[1:] + '\n'
+            merged_groups.append((delete, insert))
+
+    return merged_groups
+
+def skwonk(database: str, diff: str):
+    original = '\n'.join([line for line in diff.splitlines() if not line.startswith('+')])
+    # 1. Zone in on the string we are going to be editing
+    zone, _ = fuzzy_find(original, database)
+    original_zone = zone
+
+    if zone is None:
+        return database
+
+    # 2. Parse the diff into groups
+    diff_groups = parse_diff(diff)
+    # 3. Find and replace
+    for i in range(len(diff_groups)):
+        group = diff_groups[i]
+        if not isinstance(group, tuple): continue
+        find, replace = group
+        if find == '':
+            # Insertion
+            prior_context = fuzzy_find(diff_groups[i - 1], zone)[0] if i > 0 else None
+            further_context = fuzzy_find(diff_groups[i + 1], zone)[0] if i < len(diff_groups) - 1 else None
+            insertion_index = zone.find(prior_context) + len(prior_context) if prior_context else None
+            if not insertion_index:
+                insertion_index = zone.find(further_context) if further_context else 0
+            zone = zone[:insertion_index] + '\n' + replace + zone[insertion_index:]
+        else:
+            # Fuzzy find and replace
+            fuzz, _ = fuzzy_find(find, zone)
+            if fuzz is None: continue
+            zone = zone.replace(fuzz, replace, 1)
+    database = database.replace(original_zone, zone, 1)
     return database
 
 def find_most_similar_file_name(files, query):
