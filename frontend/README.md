@@ -1,70 +1,71 @@
-# Getting Started with Create React App
+# fraimwork README
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is the README for your extension "fraimwork". After writing up a brief description, we recommend including the following sections.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
 
-### `npm start`
+For example if there is an image subfolder under your extension project workspace:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+\!\[feature X\]\(images/feature-x.png\)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
 
-### `npm test`
+## Requirements
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+If you have any requirements or dependencies, add a section describing those and how to install and configure them.
 
-### `npm run build`
+## Extension Settings
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+For example:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+This extension contributes the following settings:
 
-### `npm run eject`
+* `myExtension.enable`: Enable/disable this extension.
+* `myExtension.thing`: Set to `blah` to do something.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Known Issues
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Calling out known issues can help limit users opening duplicate issues against your extension.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Release Notes
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Users appreciate release notes as you update your extension.
 
-## Learn More
+### 1.0.0
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Initial release of ...
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### 1.0.1
 
-### Code Splitting
+Fixed issue #.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### 1.1.0
 
-### Analyzing the Bundle Size
+Added features X, Y, and Z.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+---
 
-### Making a Progressive Web App
+## Following extension guidelines
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
 
-### Advanced Configuration
+* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## Working with Markdown
 
-### Deployment
+You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
+* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
+* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
 
-### `npm run build` fails to minify
+## For more information
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
+* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+
+**Enjoy!**
