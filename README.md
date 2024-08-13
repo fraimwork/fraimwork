@@ -1,3 +1,3 @@
 # Fraimwork
 
-A web app that allows users to interact with their codebase's frameworks.
+A web app that enables intelligent interaction with framework-based repositories.
