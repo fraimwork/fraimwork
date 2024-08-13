@@ -1,6 +1,6 @@
 import time
 
-def repeat_until_finish(func, max_retries=5, delay=0.1):
+async def repeat_until_finish(func, max_retries=5, delay=0.1):
     retries = 0
     while retries < max_retries:
         try:
