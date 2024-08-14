@@ -17,7 +17,7 @@ function getWebviewContent(context: vscode.ExtensionContext): string {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    let disposable = vscode.commands.registerCommand('extension.showDependencyGraphForAllFiles', async () => {
+    let disposable = vscode.commands.registerCommand('fraimwork.showDependencyGraphForAllFiles', async () => {
         vscode.window.showInformationMessage('Analyzing dependencies...');
 
         const files = await getAllFilesInWorkspace();

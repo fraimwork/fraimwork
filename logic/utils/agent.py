@@ -163,6 +163,7 @@ class Agent:
             except Exception as e:
                 print(e)
                 await asyncio.sleep(2)
+
     def to_dict(self):
         return {
             "name": self.name,
@@ -171,7 +172,7 @@ class Agent:
             "generation_config": self.generation_config.to_dict(),
             "safety_settings": self.safety_settings.to_dict()
         }
-    
+
     @staticmethod
     def from_dict(data: dict):
         generation_config = GenerationConfig.from_dict(data["generation_config"])

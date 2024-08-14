@@ -410,35 +410,38 @@ def parse_diff(diff_string):
     return merged_groups
 
 def skwonk(database: str, diff: str):
-    original = ''.join([line for line in diff.splitlines(keepends=True) if not line.startswith('+')])
-    # 1. Zone in on the string we are going to be editing
-    zone, _ = fuzzy_find(original, database)
-    original_zone = zone
-
-    if zone is None:
-        return database
-
-    # 2. Parse the diff into groups
-    diff_groups = parse_diff(diff)
-    # 3. Find and replace
-    for i in range(len(diff_groups)):
-        group = diff_groups[i]
-        if not isinstance(group, tuple): continue
-        find, replace = group
-        if find == '':
-            # Insertion
-            prior_context = fuzzy_find(diff_groups[i - 1], zone)[0] if i > 0 else None
-            further_context = fuzzy_find(diff_groups[i + 1], zone)[0] if i < len(diff_groups) - 1 else None
-            insertion_index = zone.find(prior_context) + len(prior_context) if prior_context else None
-            if not insertion_index:
-                insertion_index = zone.find(further_context) if further_context else 0
-            zone = zone[:insertion_index] + '\n' + replace + zone[insertion_index:]
-        else:
-            # Fuzzy find and replace
-            fuzz, _ = fuzzy_find(find, zone)
-            if fuzz is None: continue
-            zone = zone.replace(fuzz, replace, 1)
-    database = database.replace(original_zone, zone, 1)
+    hunks = re.split(r"@@.*?@@", diff)
+    i = 0
+    for hunk in hunks:
+        original = ''.join([line for line in hunk.splitlines(keepends=True) if not line.startswith('+')])
+        # 1. Zone in on the string we are going to be editing
+        zone, _ = fuzzy_find(original, database[i:])
+        i = database.find(zone) + len(zone)
+        original_zone = zone
+        if zone is None:
+            return database
+        
+        # 2. Parse the diff into groups
+        diff_groups = parse_diff(hunk)
+        # 3. Find and replace
+        for i in range(len(diff_groups)):
+            group = diff_groups[i]
+            if not isinstance(group, tuple): continue
+            find, replace = group
+            if find == '':
+                # Insertion
+                prior_context = fuzzy_find(diff_groups[i - 1], zone)[0] if i > 0 else None
+                further_context = fuzzy_find(diff_groups[i + 1], zone)[0] if i < len(diff_groups) - 1 else None
+                insertion_index = zone.find(prior_context) + len(prior_context) if prior_context else None
+                if not insertion_index:
+                    insertion_index = zone.find(further_context) if further_context else 0
+                zone = zone[:insertion_index] + '\n' + replace + zone[insertion_index:]
+            else:
+                # Fuzzy find and replace
+                fuzz, _ = fuzzy_find(find, zone)
+                if fuzz is None: continue
+                zone = zone.replace(fuzz, replace, 1)
+        database = database.replace(original_zone, zone, 1)
     return database
 
 def find_most_similar_file_name(files, query):
@@ -446,7 +449,6 @@ def find_most_similar_file_name(files, query):
         (file for file in files),
         key=lambda file: fasta_algorithm(file, query, k=6)[1]
     )
-
 
 def compute_nested_levels(code_lines: list[str], indent_is_relevant: bool = True) -> list[int]:
     nested_levels = []

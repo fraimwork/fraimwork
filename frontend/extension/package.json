@@ -1,6 +1,6 @@
 {
   "name": "fraimwork",
-  "displayName": "fraimwork",
+  "displayName": "Fraimwork",
   "description": "A tool for intelligent interaction with framework-based repositories.",
   "version": "0.0.1",
   "engines": {
@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "fraimwork.helloWorld",
-        "title": "Hello World"
+        "command": "fraimwork.showDependencyGraphForAllFiles",
+        "title": "Show Dependency Graph For All Files"
       }
     ]
   },
