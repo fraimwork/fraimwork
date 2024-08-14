@@ -17,12 +17,12 @@ function getWebviewContent(context: vscode.ExtensionContext): string {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    let disposable = vscode.commands.registerCommand('fraimwork.showDependencyGraphForAllFiles', async () => {
+    const disposable = vscode.commands.registerCommand('fraimwork.examineDependencies', async () => {
         vscode.window.showInformationMessage('Analyzing dependencies...');
 
         const files = await getAllFilesInWorkspace();
         const dependencyGraph: { [file: string]: string[] } = {};
-
+        console.log('files: ', files);
         for (const fileUri of files) {
             const document = await vscode.workspace.openTextDocument(fileUri);
             const dependencies = await findDependenciesInDocument(document);
@@ -37,7 +37,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function getAllFilesInWorkspace(): Promise<vscode.Uri[]> {
     const pattern = '**/*.{ts,js,py,dart}'; // Adjust this pattern based on the file types you're interested in
-    return await vscode.workspace.findFiles(pattern);
+    const excludePattern = '**/node_modules/**';
+    return await vscode.workspace.findFiles(pattern, excludePattern);
 }
 
 async function analyzeDependenciesForAllFiles() {
@@ -56,17 +57,27 @@ async function analyzeDependenciesForAllFiles() {
 async function findDependenciesInDocument(document: vscode.TextDocument): Promise<string[]> {
     const symbolPositions = findImportPositions(document);
     const dependencies: string[] = [];
-
     for (const position of symbolPositions) {
-        const locations = await vscode.commands.executeCommand<vscode.Location[]>(
-            'vscode.executeDefinitionProvider',
-            document.uri,
-            position
-        );
+        const lineText = document.lineAt(position.line).text;
+        const words = lineText.split(/\s+/);
+        const wordPositions = words.map((word, index) => {
+            console.log('word: ', word);
+            return new vscode.Position(position.line, index+1);
+        });
 
-        if (locations && locations.length > 0) {
-            const targetFile = locations[0].uri.fsPath;
-            dependencies.push(targetFile);
+        for (const wordPosition of wordPositions) {
+            const locations = await vscode.commands.executeCommand<vscode.Location[]>(
+                'vscode.executeDefinitionProvider',
+                document.uri,
+                wordPosition
+            );
+
+            console.log('locations: ', locations);
+
+            if (locations && locations.length > 0) {
+                const targetFile = locations[0].uri.fsPath;
+                dependencies.push(targetFile);
+            }
         }
     }
 
@@ -80,6 +91,7 @@ function findImportPositions(document: vscode.TextDocument): vscode.Position[] {
 
     lines.forEach((line, i) => {
         if (line.startsWith('import') || line.startsWith('from')) {
+            console.log('line: ', line);
             importPositions.push(new vscode.Position(i, 0));
         }
     });

@@ -1,7 +1,7 @@
 {
   "name": "fraimwork",
-  "displayName": "Fraimwork",
-  "description": "A tool for intelligent interaction with framework-based repositories.",
+  "displayName": "fraimwork",
+  "description": "Intelligent interaction with framework-based repos",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.92.0"
@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "fraimwork.showDependencyGraphForAllFiles",
-        "title": "Show Dependency Graph For All Files"
+        "command": "fraimwork.examineDependencies",
+        "title": "Examine Dependencies"
       }
     ]
   },
