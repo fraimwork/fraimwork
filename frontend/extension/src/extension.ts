@@ -16,19 +16,47 @@ function getWebviewContent(context: vscode.ExtensionContext): string {
     return htmlContent;
 }
 
-async function analyzeDependencies() {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-        vscode.window.showErrorMessage("No open text editor found.");
-        return;
+export function activate(context: vscode.ExtensionContext) {
+    let disposable = vscode.commands.registerCommand('extension.showDependencyGraphForAllFiles', async () => {
+        vscode.window.showInformationMessage('Analyzing dependencies...');
+
+        const files = await getAllFilesInWorkspace();
+        const dependencyGraph: { [file: string]: string[] } = {};
+
+        for (const fileUri of files) {
+            const document = await vscode.workspace.openTextDocument(fileUri);
+            const dependencies = await findDependenciesInDocument(document);
+            dependencyGraph[fileUri.fsPath] = dependencies;
+        }
+
+        visualizeDependencyGraph(dependencyGraph);
+    });
+
+    context.subscriptions.push(disposable);
+}
+
+async function getAllFilesInWorkspace(): Promise<vscode.Uri[]> {
+    const pattern = '**/*.{ts,js,py,dart}'; // Adjust this pattern based on the file types you're interested in
+    return await vscode.workspace.findFiles(pattern);
+}
+
+async function analyzeDependenciesForAllFiles() {
+    const files = await getAllFilesInWorkspace();
+    const dependencyGraph: { [file: string]: string[] } = {};
+
+    for (const fileUri of files) {
+        const document = await vscode.workspace.openTextDocument(fileUri);
+        const dependencies = await findDependenciesInDocument(document);
+        dependencyGraph[fileUri.fsPath] = dependencies;
     }
 
-    const document = editor.document;
-    const filePath = document.uri.fsPath;
+    visualizeDependencyGraph(dependencyGraph);
+}
 
-    const symbolPositions: vscode.Position[] = findImportPositions(document);
-
+async function findDependenciesInDocument(document: vscode.TextDocument): Promise<string[]> {
+    const symbolPositions = findImportPositions(document);
     const dependencies: string[] = [];
+
     for (const position of symbolPositions) {
         const locations = await vscode.commands.executeCommand<vscode.Location[]>(
             'vscode.executeDefinitionProvider',
@@ -42,7 +70,7 @@ async function analyzeDependencies() {
         }
     }
 
-    visualizeDependencyGraph(filePath, dependencies);
+    return dependencies;
 }
 
 function findImportPositions(document: vscode.TextDocument): vscode.Position[] {
@@ -59,7 +87,7 @@ function findImportPositions(document: vscode.TextDocument): vscode.Position[] {
     return importPositions;
 }
 
-function visualizeDependencyGraph(filePath: string, dependencies: string[]) {
+function visualizeDependencyGraph(dependencyGraph: { [file: string]: string[] }) {
     const panel = vscode.window.createWebviewPanel(
         'dependencyGraph',
         'Dependency Graph',
@@ -67,38 +95,23 @@ function visualizeDependencyGraph(filePath: string, dependencies: string[]) {
         {}
     );
 
-    const graphData = buildGraphData(filePath, dependencies);
+    const graphData = buildGraphData(dependencyGraph);
     panel.webview.html = renderGraph(graphData);
 }
 
-function buildGraphData(filePath: string, dependencies: string[]) {
-    const graph = {
-        nodes: [{ id: filePath }],
-        edges: dependencies.map(dep => ({ from: filePath, to: dep })),
-    };
-    return graph;
+function buildGraphData(dependencyGraph: { [file: string]: string[] }) {
+    const nodes = Object.keys(dependencyGraph).map(file => ({ id: file }));
+    const edges = Object.keys(dependencyGraph).flatMap(file => {
+        return dependencyGraph[file].map(dep => ({ from: file, to: dep }));
+    });
+
+    return { nodes, edges };
 }
 
 function renderGraph(graphData: any): string {
     // Use a visualization library like D3.js or render simple HTML/SVG.
     return `<html><body><pre>${JSON.stringify(graphData, null, 2)}</pre></body></html>`;
 }
-
-export function activate(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        vscode.commands.registerCommand('extension.showFraimworkChat', () => {
-            const panel = vscode.window.createWebviewPanel(
-                'fraimworkChat',
-                'Fraimwork Chat',
-                vscode.ViewColumn.One,
-                {}
-            );
-
-            panel.webview.html = getWebviewContent(context);
-        })
-    );
-}
-
 
 // This method is called when your extension is deactivated
 export function deactivate() {}

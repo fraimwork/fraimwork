@@ -76,6 +76,15 @@ class Interaction:
             'role': self.responder,
             'parts': [self.response],
         }
+    
+    @staticmethod
+    def from_dict(data: dict):
+        return Interaction(
+            data['prompt']['parts'][0],
+            data['response']['parts'][0],
+            data['prompt']['role'],
+            data['response']['role']
+        )
 
 class Agent:
     def __init__(self, model_name, api_key, name, generation_config=GenerationConfig(), system_prompt=None, safety_settings=SafetySettings()):
