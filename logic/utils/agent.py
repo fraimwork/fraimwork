@@ -22,6 +22,16 @@ class GenerationConfig:
             "max_output_tokens": self.max_output_tokens,
             "response_mime_type": self.response_mime_type
         }
+    
+    @staticmethod
+    def from_dict(data: dict):
+        return GenerationConfig(
+            data.get("temperature", 1.0),
+            data.get("top_p", 0.95),
+            data.get("top_k", 64),
+            data.get("max_output_tokens", 8192),
+            data.get("response_mime_type", "text/plain")
+        )
 
 class SafetySettings:
     def __init__(self, 
@@ -41,6 +51,15 @@ class SafetySettings:
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: self.harm_category_sexually_explicit,
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: self.harm_category_dangerous_content
         }
+    
+    @staticmethod
+    def from_dict(data: dict):
+        return SafetySettings(
+            data.get(HarmCategory.HARM_CATEGORY_HATE_SPEECH, HarmBlockThreshold.BLOCK_NONE),
+            data.get(HarmCategory.HARM_CATEGORY_HARASSMENT, HarmBlockThreshold.BLOCK_NONE),
+            data.get(HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, HarmBlockThreshold.BLOCK_NONE),
+            data.get(HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, HarmBlockThreshold.BLOCK_NONE)
+        )
 
 class Interaction:
     def __init__(self, prompt, response, asker="user", responder="model"):
@@ -135,6 +154,20 @@ class Agent:
             except Exception as e:
                 print(e)
                 await asyncio.sleep(2)
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "system_prompt": self.system_prompt,
+            "model_name": self.model_name,
+            "generation_config": self.generation_config.to_dict(),
+            "safety_settings": self.safety_settings.to_dict()
+        }
+    
+    @staticmethod
+    def from_dict(data: dict):
+        generation_config = GenerationConfig.from_dict(data["generation_config"])
+        safety_settings = SafetySettings.from_dict(data["safety_settings"])
+        return Agent(data["name"], data["system_prompt"], data["model_name"], generation_config, safety_settings)
 
 class Team:
     def __init__(self, *agents: Agent):
@@ -158,3 +191,13 @@ class Team:
         for key in save_keys:
             self.context_threads[key].append(Interaction(user_prompt, response))
         return response
+    
+    def to_dict(self):
+        return {
+            "agents": {name: agent.to_dict() for name, agent in self.agents.items()}
+        }
+
+    @staticmethod
+    def from_dict(data: dict):
+        agents = {name: Agent.from_dict(agent) for name, agent in data["agents"].items()}
+        return Team(*agents.values())

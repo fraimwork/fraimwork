@@ -1,7 +1,7 @@
 {
   "name": "fraimwork",
   "displayName": "fraimwork",
-  "description": "A tool for intelligent interaction with framework-grounded codebases",
+  "description": "A tool for intelligent interaction with framework-based repositories.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.92.0"

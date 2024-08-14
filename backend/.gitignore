@@ -162,4 +162,4 @@ cython_debug/
 /data/raw/
 models/*.pth
 models/
-/app/logs/*.log
+/microservices/logs/*.log
