@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+import ignore from 'ignore';
 
 const workspaceFolders = vscode.workspace.workspaceFolders;
 
@@ -20,83 +21,55 @@ export function activate(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('fraimwork.examineDependencies', async () => {
         vscode.window.showInformationMessage('Analyzing dependencies...');
 
-        const files = await getAllFilesInWorkspace();
-        const dependencyGraph: { [file: string]: string[] } = {};
-        console.log('files: ', files);
-        for (const fileUri of files) {
-            const document = await vscode.workspace.openTextDocument(fileUri);
-            const dependencies = await findDependenciesInDocument(document);
-            dependencyGraph[fileUri.fsPath] = dependencies;
+        const files = await getFiles();
+        console.log('Files: ', files);
+        const graph: { [key: string]: string[] } = {};
+
+        for (const file of files) {
+            console.log('File: ', file.fsPath);
+            const symbols: vscode.DocumentSymbol[] = await getSymbols(file);
+            console.log('Symbols: ', symbols);
+
+            for (const symbol of symbols) {
+                const definitions = await resolveSymbolDefinition(file, symbol);
+                console.log('Definitions: ', definitions);
+
+                for (const def of definitions) {
+                    if (!graph[file.path]) {
+                        graph[file.path] = [];
+                    }
+
+                    graph[file.path].push(def.uri.fsPath);
+                }
+            }
         }
 
-        visualizeDependencyGraph(dependencyGraph);
+        visualizeDependencyGraph(graph);
     });
 
     context.subscriptions.push(disposable);
 }
 
-async function getAllFilesInWorkspace(): Promise<vscode.Uri[]> {
-    const pattern = '**/*.{ts,js,py,dart}'; // Adjust this pattern based on the file types you're interested in
-    const excludePattern = '**/node_modules/**';
-    return await vscode.workspace.findFiles(pattern, excludePattern);
+
+async function getFiles(): Promise<vscode.Uri[]> {
+    const pattern = '**/*.{py}'; // Adjust this pattern based on the file types you're interested in
+    const ignoredPattern = '**/node_modules/**'; // Adjust this pattern based on the file types you're interested in
+    const files = await vscode.workspace.findFiles(pattern, ignoredPattern);
+    return files;
 }
 
-async function analyzeDependenciesForAllFiles() {
-    const files = await getAllFilesInWorkspace();
-    const dependencyGraph: { [file: string]: string[] } = {};
-
-    for (const fileUri of files) {
-        const document = await vscode.workspace.openTextDocument(fileUri);
-        const dependencies = await findDependenciesInDocument(document);
-        dependencyGraph[fileUri.fsPath] = dependencies;
-    }
-
-    visualizeDependencyGraph(dependencyGraph);
+async function getSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[]> {
+    const document = await vscode.workspace.openTextDocument(uri);
+    console.log('Document: ', document.getText());
+    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>('vscode.executeDocumentSymbolProvider', document.uri);
+    return symbols || [];
 }
 
-async function findDependenciesInDocument(document: vscode.TextDocument): Promise<string[]> {
-    const symbolPositions = findImportPositions(document);
-    const dependencies: string[] = [];
-    for (const position of symbolPositions) {
-        const lineText = document.lineAt(position.line).text;
-        const words = lineText.split(/\s+/);
-        const wordPositions = words.map((word, index) => {
-            console.log('word: ', word);
-            return new vscode.Position(position.line, index+1);
-        });
-
-        for (const wordPosition of wordPositions) {
-            const locations = await vscode.commands.executeCommand<vscode.Location[]>(
-                'vscode.executeDefinitionProvider',
-                document.uri,
-                wordPosition
-            );
-
-            console.log('locations: ', locations);
-
-            if (locations && locations.length > 0) {
-                const targetFile = locations[0].uri.fsPath;
-                dependencies.push(targetFile);
-            }
-        }
-    }
-
-    return dependencies;
-}
-
-function findImportPositions(document: vscode.TextDocument): vscode.Position[] {
-    const importPositions: vscode.Position[] = [];
-    const text = document.getText();
-    const lines = text.split('\n');
-
-    lines.forEach((line, i) => {
-        if (line.startsWith('import') || line.startsWith('from')) {
-            console.log('line: ', line);
-            importPositions.push(new vscode.Position(i, 0));
-        }
-    });
-
-    return importPositions;
+async function resolveSymbolDefinition(uri: vscode.Uri, symbol: vscode.DocumentSymbol) {
+    const position = new vscode.Position(symbol.selectionRange.start.line, symbol.selectionRange.start.character);
+    const locations = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', uri, position);
+    
+    return locations || [];
 }
 
 function visualizeDependencyGraph(dependencyGraph: { [file: string]: string[] }) {
