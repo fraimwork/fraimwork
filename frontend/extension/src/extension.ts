@@ -26,7 +26,6 @@ export function activate(context: vscode.ExtensionContext) {
 
         for (const file of files) {
             const dependencies = await findDependencies(file);
-            console.log('File: ', file.fsPath, ' Dependencies: ', dependencies);
             graph[file.fsPath] = Array.from(dependencies);
         }
 
@@ -52,7 +51,6 @@ async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
             const tokens = line.split(' ');
 
             for (const token of tokens) {
-                console.log('Token: ', token);
                 const location = new vscode.Position(i+1, line.indexOf(token) + token.length/2);
 
                 // Get definition using the language server
@@ -65,7 +63,11 @@ async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
                 if (locations && locations.length > 0) {
                     const dep = locations[0];
                     const dependencyFile = dep.targetUri.fsPath;  // Ignore type error
-                    dependencies.add(dependencyFile);
+                    // Ensure the dependency file is not the current file and that it is in the same workspace
+                    if (dependencyFile !== file.fsPath && workspaceFolders && workspaceFolders.some((folder) => dependencyFile.startsWith(folder.uri.fsPath))) {
+                        dependencies.add(dependencyFile);
+                    }
+                    
                 }
             }
         }
@@ -76,7 +78,7 @@ async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
 
 
 async function getFiles(): Promise<vscode.Uri[]> {
-    const pattern = '**\\*.dart'; // Adjust this pattern based on the file types you're interested in
+    const pattern = '**/*.{js,jsx,ts,tsx,py,dart}';
     const ignoredPattern = '**/node_modules/**'; // Adjust this pattern based on the file types you're interested in
     const files = await vscode.workspace.findFiles(pattern, ignoredPattern);
     return files;
