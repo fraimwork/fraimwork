@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import ignore from 'ignore';
 
 const workspaceFolders = vscode.workspace.workspaceFolders;
 
@@ -26,22 +25,9 @@ export function activate(context: vscode.ExtensionContext) {
         const graph: { [key: string]: string[] } = {};
 
         for (const file of files) {
-            console.log('File: ', file.fsPath);
-            const symbols: vscode.DocumentSymbol[] = await getSymbols(file);
-            console.log('Symbols: ', symbols);
-
-            for (const symbol of symbols) {
-                const definitions = await resolveSymbolDefinition(file, symbol);
-                console.log('Definitions: ', definitions);
-
-                for (const def of definitions) {
-                    if (!graph[file.path]) {
-                        graph[file.path] = [];
-                    }
-
-                    graph[file.path].push(def.uri.fsPath);
-                }
-            }
+            const dependencies = await findDependencies(file);
+            console.log('File: ', file.fsPath, ' Dependencies: ', dependencies);
+            graph[file.fsPath] = Array.from(dependencies);
         }
 
         visualizeDependencyGraph(graph);
@@ -50,9 +36,47 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
 }
 
+async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
+    const dependencies = new Set<string>();
+
+    const document = await vscode.workspace.openTextDocument(file);
+    const text = document.getText();
+    const textEditor = await vscode.window.showTextDocument(document, { preview: true });
+    const lines = text.split('\n');
+    if (lines) {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.trim().startsWith('import') && !line.trim().startsWith('from')) {
+                continue;
+            }
+            const tokens = line.split(' ');
+
+            for (const token of tokens) {
+                console.log('Token: ', token);
+                const location = new vscode.Position(i+1, line.indexOf(token) + token.length/2);
+
+                // Get definition using the language server
+                const locations = await vscode.commands.executeCommand<vscode.Location[]>(
+                    'vscode.executeDefinitionProvider',
+                    file,
+                    location
+                );
+
+                if (locations && locations.length > 0) {
+                    const dep = locations[0];
+                    const dependencyFile = dep.targetUri.fsPath;  // Ignore type error
+                    dependencies.add(dependencyFile);
+                }
+            }
+        }
+    }
+
+    return dependencies;
+}
+
 
 async function getFiles(): Promise<vscode.Uri[]> {
-    const pattern = '**/*.{py}'; // Adjust this pattern based on the file types you're interested in
+    const pattern = '**\\*.dart'; // Adjust this pattern based on the file types you're interested in
     const ignoredPattern = '**/node_modules/**'; // Adjust this pattern based on the file types you're interested in
     const files = await vscode.workspace.findFiles(pattern, ignoredPattern);
     return files;
@@ -60,8 +84,8 @@ async function getFiles(): Promise<vscode.Uri[]> {
 
 async function getSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[]> {
     const document = await vscode.workspace.openTextDocument(uri);
-    console.log('Document: ', document.getText());
     const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>('vscode.executeDocumentSymbolProvider', document.uri);
+
     return symbols || [];
 }
 
