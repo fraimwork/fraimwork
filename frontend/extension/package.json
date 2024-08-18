@@ -31,6 +31,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/graphlib": "^2.1.12",
     "@types/mocha": "^10.0.7",
     "@types/node": "20.x",
     "@types/vscode": "^1.92.0",
@@ -43,5 +44,9 @@
     "typescript": "^5.4.5",
     "webpack": "^5.92.1",
     "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "firebase": "^10.13.0",
+    "graphlib": "^2.1.8"
   }
 }
