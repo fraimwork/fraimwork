@@ -52,34 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
-    // const symbols = await getSymbols(file);
     const dependencies = new Set<string>();
-    // const promises = symbols.map(async symbol => {
-    //     const location = symbol.selectionRange.start;
-    //     return vscode.commands.executeCommand<vscode.LocationLink[]>(
-    //         'vscode.executeDefinitionProvider',
-    //         file,
-    //         location
-    //     ).then(locations => {
-    //         if (locations && locations.length > 0) {
-    //             const dependencyFile = locations[0].targetUri.fsPath;
-    //             // Ensure the dependency file is not the current file and that it is in the same workspace
-    //             if (dependencyFile !== file.fsPath && workspaceFolders && workspaceFolders.some((folder) => dependencyFile.startsWith(folder.uri.fsPath))) {
-    //                 const relativePath = path.relative(workspaceFolders[0].uri.fsPath, dependencyFile);
-    //                 return relativePath;
-    //             }
-    //         }
-    //         return null;
-    //     });
-    // });
-    // const relativePaths = await Promise.all(promises);
-    // for (const relativePath of relativePaths) {
-    //     if (relativePath) {
-    //         dependencies.add(relativePath);
-    //     }
-    // }
-
-    // return dependencies;
     
     const document = await vscode.workspace.openTextDocument(file);
     const text = document.getText();
@@ -93,6 +66,7 @@ async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
             const tokens = line.split(' ');
 
             for (const token of tokens) {
+                console.log(token);
                 const location = new vscode.Position(i, line.indexOf(token) + token.length/2);
 
                 // Get definition using the language server
@@ -103,13 +77,34 @@ async function findDependencies(file: vscode.Uri): Promise<Set<string>> {
                 );
 
                 if (locations && locations.length > 0) {
-                    const dependencyFile = locations[0].targetUri.fsPath;
-                    // Ensure the dependency file is not the current file and that it is in the same workspace
-                    if (dependencyFile !== file.fsPath && workspaceFolders && workspaceFolders.some((folder) => dependencyFile.startsWith(folder.uri.fsPath))) {
-                        const relativePath = path.relative(workspaceFolders[0].uri.fsPath, dependencyFile);
-                        dependencies.add(relativePath);
+                    try {
+                        const dependencyFile = locations[0].targetUri.fsPath;
+                        // Ensure the dependency file is not the current file and that it is in the same workspace
+                        if (dependencyFile !== file.fsPath && workspaceFolders && workspaceFolders.some((folder) => dependencyFile.startsWith(folder.uri.fsPath))) {
+                            const relativePath = path.relative(workspaceFolders[0].uri.fsPath, dependencyFile);
+                            // Get symbols within dependency
+                            const dependencyUri = vscode.Uri.file(dependencyFile);
+                            if (dependencyUri) {
+                                const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+                                    'vscode.executeDocumentSymbolProvider',
+                                    dependencyUri
+                                );
+                                if (symbols) {
+                                    for (const symbol of symbols) {
+                                        if (symbol.kind == 5 || symbol.kind == 12 || symbol.kind == 1) {
+                                            const symbolKind = SymbolKindMap[symbol.kind] || "Unknown";
+                                            dependencies.add(`${relativePath}#${symbol.name} (${symbolKind})`);
+                                        } else {
+                                            dependencies.add(dependencyFile);
+                                        }
+                                    }
+                                } 
+                            }
+                            
+                        }
+                    } catch (error) {
+                        console.log("Error retrieving file " +  error);
                     }
-                    
                 }
             }
         }
@@ -153,3 +148,19 @@ function renderGraph(graphData: any): string {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+
+// Based on documentation provided by vscode: https://vscode-api.js.org/enums/vscode.SymbolKind.html
+const SymbolKindMap: { [key: number]: string } = {
+    1: 'File',
+    2: 'Module',
+    3: 'Namespace',
+    4: 'Package',
+    5: 'Class',
+    6: 'Method',
+    7: 'Property',
+    8: 'Field',
+    9: 'Constructor',
+    10: 'Enum',
+    11: 'Interface',
+    12: 'Function',
+};
