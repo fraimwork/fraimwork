@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GithubAuthProvider } from "firebase/auth";
+import { getAuth, signInWithPopup, GithubAuthProvider, Auth } from "firebase/auth";
 
-const firebaseConfig = {
+const firebaseConfig: { [key: string]: string } = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
   projectId: "YOUR_PROJECT_ID",
@@ -12,10 +12,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const auth: Auth = getAuth(app);
 
-const provider = new GithubAuthProvider();
+const provider: GithubAuthProvider = new GithubAuthProvider();
 
 export { app, auth, provider };
-
-

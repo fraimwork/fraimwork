@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #chat { height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+        #input { width: 100%; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="chat"></div>
+    <input type="text" id="input" placeholder="Type a message..." />
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        document.getElementById('input').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const message = event.target.value;
+                vscode.postMessage({ type: 'chat', text: message });
+                event.target.value = '';
+            }
+        });
+
+        window.addEventListener('message', event => {
+            const message = event.data;
+            const chat = document.getElementById('chat');
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message.text;
+            chat.appendChild(messageElement);
+            chat.scrollTop = chat.scrollHeight;
+        });
+    </script>
+</body>
+</html>
