@@ -1,4 +1,3 @@
-import os
 import google.generativeai as genai
 from dependency import build_dependency_graph
 from dependency import topological_sort
@@ -30,32 +29,40 @@ def fix_broken_code(dependency_graph, broken_nodes):
         
         # Store the fixed code
         fixed_code[node] = fixed_file_content
+        write_file(node, fixed_file_content)
 
     return fixed_code
 
 # LLM API integration to fix code
 def call_llm_to_fix(broken_code, context):
     API_KEY = "AIzaSyCLz8hJEC1iSfVb0KWDYink4C61f8hpXQU" # Make into env variable eventually...
-    genai.configure(API_KEY)
+    genai.configure(api_key=API_KEY)
 
     # Create a prompt combining broken code and its context
     context_str = "\n\n".join([f"Dependency {dep}: {content}" for dep, content in context.items()])
     prompt = f"Here is a broken code:\n\n{broken_code}\n\n" \
              f"Here is the context from its dependencies:\n\n{context_str}\n\n" \
-             "Fix the broken code considering the context."
+             f"Fix the broken code considering the context, and try to perserve the style of the current code. \n\n" \
+             f"Address any bugs or errors present in the code.\n\n" \
+             f"Do NOT offer explanations, just the correct code. \n\n" \
+             f"Do NOT use ANY formatting character. \n\n" \
+             f"Do not modify or remove any comments in the file. \n\n" \
+            #  f"Do NOT any extra explanation. \n\n"
+    
+    # model: gemini-1.5-flash
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt) # maybe can add temperature and token settings?
+    print(response.text) # just to see what it responds with... remove in later iterations
 
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-    response = genai.generate_text(
-        prompt=prompt,
-        model=model,  
-        max_output_tokens=1000,  # Adjust token limit as needed
-        temperature=0.5  # You can adjust the temperature for more or less randomness
-    )
-
-    return response.choices[0].text.strip()
+    return response.text.strip()
 
 # Helper function to read file content (mocked for now)
 def read_file(file):
     # In a real-world scenario, read from disk or a database
     with open(file, 'r') as f:
         return f.read()
+
+# Helper function to write file content (used to directly edit broken file with the code gemini returns)
+def write_file(file, content):
+    with open(file, 'w') as f:
+        f.write(content)
