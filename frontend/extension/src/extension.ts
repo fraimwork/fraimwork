@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Graph } from 'graphlib';
+import { stringify } from 'querystring';
 
 const workspaceFolders = vscode.workspace.workspaceFolders;
 
@@ -153,6 +154,7 @@ function visualizeDependencyGraph(dependencyGraph: Graph) {
 }
 
 function renderGraph(graphData: { nodes: string[], edges: { v: string, w: string }[] }): string {
+    return `<html><body><pre>${JSON.stringify(graphData, null, 2)}</pre></body></html>`;
     return `
     <html>
     <head>
@@ -246,7 +248,9 @@ function renderGraph(graphData: { nodes: string[], edges: { v: string, w: string
     </html>
     `;
 }
-
+function stringifyGraph(graphData: { nodes: string[], edges: { v: string, w: string }[] }): string {
+    return `<html><body><pre>${JSON.stringify(graphData, null, 2)}</pre></body></html>`;
+}    
 // This method is called when your extension is deactivated
 export function deactivate() {}
 
